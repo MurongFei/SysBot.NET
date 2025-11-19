@@ -28,7 +28,7 @@ public sealed partial class Main : Form
             }
         }
 
-        RTB_Logs.MaxLength = 32_767; // character length
+        RTB_Logs.MaxLength = 32_767; // 字符长度
         LoadControls();
         Text = $"{Text} ({Config.Mode})";
         Task.Run(BotMonitor);
@@ -61,10 +61,10 @@ public sealed partial class Main : Form
     {
         ProgramMode.SWSH => new PokeBotRunnerImpl<PK8>(cfg.Hub, new BotFactory8SWSH()),
         ProgramMode.BDSP => new PokeBotRunnerImpl<PB8>(cfg.Hub, new BotFactory8BS()),
-        ProgramMode.LA   => new PokeBotRunnerImpl<PA8>(cfg.Hub, new BotFactory8LA()),
-        ProgramMode.SV   => new PokeBotRunnerImpl<PK9>(cfg.Hub, new BotFactory9SV()),
-        ProgramMode.LZA  => new PokeBotRunnerImpl<PA9>(cfg.Hub, new BotFactory9LZA()),
-        _ => throw new IndexOutOfRangeException("Unsupported mode."),
+        ProgramMode.LA => new PokeBotRunnerImpl<PA8>(cfg.Hub, new BotFactory8LA()),
+        ProgramMode.SV => new PokeBotRunnerImpl<PK9>(cfg.Hub, new BotFactory9SV()),
+        ProgramMode.LZA => new PokeBotRunnerImpl<PA9>(cfg.Hub, new BotFactory9LZA()),
+        _ => throw new IndexOutOfRangeException("不支持的模式。"),
     };
 
     private async Task BotMonitor()
@@ -78,9 +78,9 @@ public sealed partial class Main : Form
             }
             catch
             {
-                // Updating the collection by adding/removing bots will change the iterator
-                // Can try a for-loop or ToArray, but those still don't prevent concurrent mutations of the array.
-                // Just try, and if failed, ignore. Next loop will be fine. Locks on the collection are kinda overkill, since this task is not critical.
+                // 通过添加/删除机器人更新集合将更改迭代器
+                // 可以尝试 for 循环或 ToArray，但这些仍然无法防止数组的并发突变。
+                // 只需尝试，如果失败则忽略。下一个循环将会正常。对集合进行锁定有些过度，因为此任务并不关键。
             }
             await Task.Delay(2_000).ConfigureAwait(false);
         }
@@ -95,14 +95,14 @@ public sealed partial class Main : Form
         CB_Routine.DisplayMember = nameof(ComboItem.Text);
         CB_Routine.ValueMember = nameof(ComboItem.Value);
         CB_Routine.DataSource = list;
-        CB_Routine.SelectedValue = (int)PokeRoutineType.FlexTrade; // default option
+        CB_Routine.SelectedValue = (int)PokeRoutineType.FlexTrade; // 默认选项
 
         var protocols = Enum.GetValues<SwitchProtocol>();
         var listP = protocols.Select(z => new ComboItem(z.ToString(), (int)z)).ToArray();
         CB_Protocol.DisplayMember = nameof(ComboItem.Text);
         CB_Protocol.ValueMember = nameof(ComboItem.Value);
         CB_Protocol.DataSource = listP;
-        CB_Protocol.SelectedIndex = (int)SwitchProtocol.WiFi; // default option
+        CB_Protocol.SelectedIndex = (int)SwitchProtocol.WiFi; // 默认选项
 
         LogUtil.Forwarders.Add(new TextBoxForwarder(RTB_Logs));
     }
@@ -126,7 +126,7 @@ public sealed partial class Main : Form
                 await Task.Delay(10).ConfigureAwait(false);
         }
 
-        // Try to let all bots hard-stop before ending execution of the entire program.
+        // 在结束整个程序执行之前，尝试让所有机器人硬停止。
         WindowState = FormWindowState.Minimized;
         ShowInTaskbar = false;
         bots.StopAll();
@@ -145,13 +145,13 @@ public sealed partial class Main : Form
     {
         SaveCurrentConfig();
 
-        LogUtil.LogInfo("Starting all bots...", "Form");
+        LogUtil.LogInfo("正在启动所有机器人...", "Form");
         RunningEnvironment.InitializeStart();
         SendAll(BotControlCommand.Start);
         Tab_Logs.Select();
 
         if (Bots.Count == 0)
-            WinFormsUtil.Alert("No bots configured, but all supporting services have been started.");
+            WinFormsUtil.Alert("未配置任何机器人，但所有支持服务已启动。");
     }
 
     private void SendAll(BotControlCommand cmd)
@@ -159,7 +159,7 @@ public sealed partial class Main : Form
         foreach (var c in FLP_Bots.Controls.OfType<BotController>())
             c.SendCommand(cmd, false);
 
-        EchoUtil.Echo($"All bots have been issued a command to {cmd}.");
+        EchoUtil.Echo($"已向所有机器人发出 {GetCommandChinese(cmd)} 命令。");
     }
 
     private void B_Stop_Click(object sender, EventArgs e)
@@ -167,22 +167,22 @@ public sealed partial class Main : Form
         var env = RunningEnvironment;
         if (!env.IsRunning && (ModifierKeys & Keys.Alt) == 0)
         {
-            WinFormsUtil.Alert("Nothing is currently running.");
+            WinFormsUtil.Alert("当前没有运行任何内容。");
             return;
         }
 
         var cmd = BotControlCommand.Stop;
 
-        if ((ModifierKeys & Keys.Control) != 0 || (ModifierKeys & Keys.Shift) != 0) // either, because remembering which can be hard
+        if ((ModifierKeys & Keys.Control) != 0 || (ModifierKeys & Keys.Shift) != 0) // 任意一个，因为记住哪个可能很困难
         {
             if (env.IsRunning)
             {
-                WinFormsUtil.Alert("Commanding all bots to Idle.", "Press Stop (without a modifier key) to hard-stop and unlock control, or press Stop with the modifier key again to resume.");
+                WinFormsUtil.Alert("命令所有机器人进入空闲状态。", "按停止（不带修饰键）以硬停止并解锁控制，或再次按停止（带修饰键）以恢复。");
                 cmd = BotControlCommand.Idle;
             }
             else
             {
-                WinFormsUtil.Alert("Commanding all bots to resume their original task.", "Press Stop (without a modifier key) to hard-stop and unlock control.");
+                WinFormsUtil.Alert("命令所有机器人恢复其原始任务。", "按停止（不带修饰键）以硬停止并解锁控制。");
                 cmd = BotControlCommand.Resume;
             }
         }
@@ -194,7 +194,7 @@ public sealed partial class Main : Form
         var cfg = CreateNewBotConfig();
         if (!AddBot(cfg))
         {
-            WinFormsUtil.Alert("Unable to add bot; ensure details are valid and not duplicate with an already existing bot.");
+            WinFormsUtil.Alert("无法添加机器人；请确保详细信息有效且不与现有机器人重复。");
             return;
         }
         System.Media.SystemSounds.Asterisk.Play();
@@ -211,7 +211,7 @@ public sealed partial class Main : Form
         PokeRoutineExecutorBase newBot;
         try
         {
-            Console.WriteLine($"Current Mode ({Config.Mode}) does not support this type of bot ({cfg.CurrentRoutineType}).");
+            Console.WriteLine($"当前模式 ({Config.Mode}) 不支持此类型的机器人 ({cfg.CurrentRoutineType})。");
             newBot = RunningEnvironment.CreateBotFromConfig(cfg);
         }
         catch
@@ -284,5 +284,21 @@ public sealed partial class Main : Form
 
         if (isWifi)
             NUD_Port.Text = "6000";
+    }
+
+    /// <summary>
+    /// 获取命令的中文描述
+    /// </summary>
+    private static string GetCommandChinese(BotControlCommand cmd)
+    {
+        return cmd switch
+        {
+            BotControlCommand.Start => "启动",
+            BotControlCommand.Stop => "停止",
+            BotControlCommand.Idle => "空闲",
+            BotControlCommand.Resume => "恢复",
+            BotControlCommand.Restart => "重启",
+            _ => cmd.ToString()
+        };
     }
 }

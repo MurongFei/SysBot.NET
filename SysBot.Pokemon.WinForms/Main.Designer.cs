@@ -5,14 +5,14 @@ namespace SysBot.Pokemon.WinForms
     partial class Main
     {
         /// <summary>
-        ///  Required designer variable.
+        /// 必需的设计器变量。
         /// </summary>
         private System.ComponentModel.IContainer components = null;
 
         /// <summary>
-        ///  Clean up any resources being used.
+        /// 清理所有正在使用的资源。
         /// </summary>
-        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
+        /// <param name="disposing">如果应释放托管资源，为 true；否则为 false。</param>
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
@@ -25,8 +25,8 @@ namespace SysBot.Pokemon.WinForms
         #region Windows Form Designer generated code
 
         /// <summary>
-        ///  Required method for Designer support - do not modify
-        ///  the contents of this method with the code editor.
+        /// 设计器支持所需的方法 - 不要修改
+        /// 使用代码编辑器修改此方法的内容。
         /// </summary>
         private void InitializeComponent()
         {
@@ -77,7 +77,7 @@ namespace SysBot.Pokemon.WinForms
             Tab_Bots.Name = "Tab_Bots";
             Tab_Bots.Size = new System.Drawing.Size(676, 241);
             Tab_Bots.TabIndex = 0;
-            Tab_Bots.Text = "Bots";
+            Tab_Bots.Text = "机器人";
             Tab_Bots.UseVisualStyleBackColor = true;
             // 
             // FLP_Bots
@@ -116,7 +116,7 @@ namespace SysBot.Pokemon.WinForms
             B_New.Name = "B_New";
             B_New.Size = new System.Drawing.Size(63, 25);
             B_New.TabIndex = 0;
-            B_New.Text = "Add";
+            B_New.Text = "添加";
             B_New.UseVisualStyleBackColor = true;
             B_New.Click += B_New_Click;
             // 
@@ -178,7 +178,7 @@ namespace SysBot.Pokemon.WinForms
             Tab_Hub.Name = "Tab_Hub";
             Tab_Hub.Size = new System.Drawing.Size(676, 241);
             Tab_Hub.TabIndex = 2;
-            Tab_Hub.Text = "Hub";
+            Tab_Hub.Text = "中心";
             Tab_Hub.UseVisualStyleBackColor = true;
             // 
             // PG_Hub
@@ -200,7 +200,7 @@ namespace SysBot.Pokemon.WinForms
             Tab_Logs.Name = "Tab_Logs";
             Tab_Logs.Size = new System.Drawing.Size(676, 241);
             Tab_Logs.TabIndex = 1;
-            Tab_Logs.Text = "Logs";
+            Tab_Logs.Text = "日志";
             Tab_Logs.UseVisualStyleBackColor = true;
             // 
             // RTB_Logs
@@ -223,7 +223,7 @@ namespace SysBot.Pokemon.WinForms
             B_Stop.Name = "B_Stop";
             B_Stop.Size = new System.Drawing.Size(80, 32);
             B_Stop.TabIndex = 4;
-            B_Stop.Text = "Stop All";
+            B_Stop.Text = "全部停止";
             B_Stop.UseVisualStyleBackColor = true;
             B_Stop.Click += B_Stop_Click;
             // 
@@ -235,7 +235,7 @@ namespace SysBot.Pokemon.WinForms
             B_Start.Name = "B_Start";
             B_Start.Size = new System.Drawing.Size(80, 32);
             B_Start.TabIndex = 3;
-            B_Start.Text = "Start All";
+            B_Start.Text = "全部开始";
             B_Start.UseVisualStyleBackColor = true;
             B_Start.Click += B_Start_Click;
             // 
@@ -252,7 +252,7 @@ namespace SysBot.Pokemon.WinForms
             MinimumSize = new System.Drawing.Size(520, 320);
             Name = "Main";
             StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            Text = "SysBot: Pokémon";
+            Text = "SysBot: 宝可梦";
             FormClosing += Main_FormClosing;
             TC_Main.ResumeLayout(false);
             Tab_Bots.ResumeLayout(false);
@@ -284,4 +284,3 @@ namespace SysBot.Pokemon.WinForms
         private System.Windows.Forms.FlowLayoutPanel FLP_Line;
     }
 }
-

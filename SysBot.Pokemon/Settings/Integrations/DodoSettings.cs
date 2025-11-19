@@ -4,11 +4,11 @@ namespace SysBot.Pokemon;
 
 public class DodoSettings
 {
-    private const string Startup = nameof(Startup);
+    private const string Startup = "启动设置";
 
-    public override string ToString() => "Dodo Integration Settings";
+    public override string ToString() => "Dodo 集成设置";
 
-    // Startup
+    // 启动设置
 
     [Category(Startup), Description("接口地址")]
     public string BaseApi { get; set; } = "https://botopen.imdodo.com";

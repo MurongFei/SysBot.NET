@@ -1,16 +1,16 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 
 namespace SysBot.Pokemon;
 
 public class FavoredPrioritySettings : IFavoredCPQSetting
 {
-    private const string Operation = nameof(Operation);
-    private const string Configure = nameof(Configure);
-    public override string ToString() => "Favoritism Settings";
+    private const string Operation = "操作设置";
+    private const string Configure = "配置设置";
+    public override string ToString() => "优先设置";
 
-    // We want to allow hosts to give preferential treatment, while still providing service to users without favor.
-    // These are the minimum values that we permit. These values yield a fair placement for the favored.
+    // 我们希望允许主机给予优先待遇，同时仍然为没有优先权的用户提供服务。
+    // 这些是我们允许的最小值。这些值为优先用户提供了公平的位置。
     private const int _mfi = 2;
     private const float _bmin = 1;
     private const float _bmax = 3;
@@ -22,34 +22,34 @@ public class FavoredPrioritySettings : IFavoredCPQSetting
     private float _exponent = 0.777f;
     private float _multiply = 0.5f;
 
-    [Category(Operation), Description("Determines how the insertion position of favored users is calculated. \"None\" will prevent any favoritism from being applied.")]
+    [Category(Operation), Description("确定优先用户的插入位置如何计算。\"None\"将阻止应用任何优先权。")]
     public FavoredMode Mode { get; set; }
 
-    [Category(Configure), Description("Inserted after (unfavored users)^(exponent) unfavored users.")]
+    [Category(Configure), Description("插入到（非优先用户）^(指数) 个非优先用户之后。")]
     public float Exponent
     {
         get => _exponent;
         set => _exponent = Math.Max(_mexp, value);
     }
 
-    [Category(Configure), Description("Multiply: Inserted after (unfavored users)*(multiply) unfavored users. Setting this to 0.2 adds in after 20% of users.")]
+    [Category(Configure), Description("乘法：插入到（非优先用户）*(乘数) 个非优先用户之后。将其设置为0.2表示在20%的用户之后插入。")]
     public float Multiply
     {
         get => _multiply;
         set => _multiply = Math.Max(_mmul, value);
     }
 
-    [Category(Configure), Description("Number of unfavored users to not skip over. This only is enforced if a significant number of unfavored users are in the queue.")]
+    [Category(Configure), Description("不跳过的非优先用户数量。这只有在队列中有大量非优先用户时才强制执行。")]
     public int MinimumFreeAhead
     {
         get => _minimumFreeAhead;
         set => _minimumFreeAhead = Math.Max(_mfi, value);
     }
 
-    [Category(Configure), Description("Minimum number of unfavored users in queue to cause {MinimumFreeAhead} to be enforced. When the aforementioned number is higher than this value, a favored user is not placed ahead of {MinimumFreeAhead} unfavored users.")]
+    [Category(Configure), Description("导致强制执行 {MinimumFreeAhead} 的队列中非优先用户的最小数量。当上述数字高于此值时，优先用户不会排在 {MinimumFreeAhead} 个非优先用户之前。")]
     public int MinimumFreeBypass => (int)Math.Ceiling(MinimumFreeAhead * MinimumFreeBypassFactor);
 
-    [Category(Configure), Description("Scalar that is multiplied with {MinimumFreeAhead} to determine the {MinimumFreeBypass} value.")]
+    [Category(Configure), Description("与 {MinimumFreeAhead} 相乘以确定 {MinimumFreeBypass} 值的标量。")]
     public float MinimumFreeBypassFactor
     {
         get => _bypassFactor;
