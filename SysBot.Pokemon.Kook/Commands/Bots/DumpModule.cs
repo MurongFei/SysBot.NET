@@ -5,14 +5,14 @@ using System.Threading.Tasks;
 
 namespace SysBot.Pokemon.Kook;
 
-[Summary("Queues new Dump trades")]
+[Summary("排队新的导出交易")]
 public class DumpModule<T> : ModuleBase<SocketCommandContext> where T : PKM, new()
 {
     private static TradeQueueInfo<T> Info => KookBot<T>.Runner.Hub.Queues.Info;
 
     [Command("dump")]
     [Alias("d")]
-    [Summary("Dumps the Pokémon you show via Link Trade.")]
+    [Summary("通过连接交易导出您展示的宝可梦数据。")]
     [RequireQueueRole(nameof(KookManager.RolesDump))]
     public Task DumpAsync(int code)
     {
@@ -22,9 +22,9 @@ public class DumpModule<T> : ModuleBase<SocketCommandContext> where T : PKM, new
 
     [Command("dump")]
     [Alias("d")]
-    [Summary("Dumps the Pokémon you show via Link Trade.")]
+    [Summary("通过连接交易导出您展示的宝可梦数据。")]
     [RequireQueueRole(nameof(KookManager.RolesDump))]
-    public Task DumpAsync([Summary("Trade Code")][Remainder] string code)
+    public Task DumpAsync([Summary("交易码")][Remainder] string code)
     {
         int tradeCode = Util.ToInt32(code);
         var sig = Context.User.GetFavor();
@@ -33,7 +33,7 @@ public class DumpModule<T> : ModuleBase<SocketCommandContext> where T : PKM, new
 
     [Command("dump")]
     [Alias("d")]
-    [Summary("Dumps the Pokémon you show via Link Trade.")]
+    [Summary("通过连接交易导出您展示的宝可梦数据。")]
     [RequireQueueRole(nameof(KookManager.RolesDump))]
     public Task DumpAsync()
     {
@@ -43,15 +43,15 @@ public class DumpModule<T> : ModuleBase<SocketCommandContext> where T : PKM, new
 
     [Command("dumpList")]
     [Alias("dl", "dq")]
-    [Summary("Prints the users in the Dump queue.")]
+    [Summary("显示导出队列中的用户列表。")]
     [RequireSudo]
     public async Task GetListAsync()
     {
         string msg = Info.GetTradeList(PokeRoutineType.Dump);
 
         var card = new CardBuilder()
-            .AddModule(new SectionModuleBuilder().WithText("These are the users who are currently waiting:"))
-            .AddModule(new SectionModuleBuilder().WithText("Pending Trades"))
+            .AddModule(new SectionModuleBuilder().WithText("当前等待导出的用户列表:"))
+            .AddModule(new SectionModuleBuilder().WithText("待处理交易"))
             .AddModule(new SectionModuleBuilder().WithText(msg))
             .Build();
         await ReplyCardAsync(card).ConfigureAwait(false);

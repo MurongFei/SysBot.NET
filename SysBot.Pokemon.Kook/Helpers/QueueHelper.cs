@@ -15,33 +15,33 @@ public static class QueueHelper<T> where T : PKM, new()
     {
         if ((uint)code > MaxTradeCode)
         {
-            await context.Channel.SendTextAsync("Trade code should be 00000000-99999999!").ConfigureAwait(false);
+            await context.Channel.SendTextAsync("交易码应在 00000000-99999999 范围内！").ConfigureAwait(false);
             return;
         }
 
         try
         {
-            const string helper = "I've added you to the queue! I'll message you here when your trade is starting.";
+            const string helper = "已将您添加到队列中！当您的交易开始时，我会在这里通知您。";
             var test = await trader.SendTextAsync(helper).ConfigureAwait(false);
 
-            // Try adding
+            // 尝试添加到队列
             var result = AddToTradeQueue(context, trade, code, trainer, sig, routine, type, trader, out var msg);
 
-            // Notify in channel
+            // 在频道中通知
             await context.Channel.SendTextAsync(msg).ConfigureAwait(false);
-            // Notify in PM to mirror what is said in the channel.
-            await trader.SendTextAsync($"{msg}\nYour trade code will be {Format.Bold($"{code:0000 0000}")}.").ConfigureAwait(false);
+            // 在私信中通知，镜像频道中的内容
+            await trader.SendTextAsync($"{msg}\n您的交易码将是 {Format.Bold($"{code:0000 0000}")}。").ConfigureAwait(false);
 
-            // Clean Up
+            // 清理工作
             if (result)
             {
-                // Delete the user's join message for privacy
+                // 为保护隐私，删除用户的加入消息
                 if (!context.IsPrivate)
                     await context.Message.DeleteAsync(RequestOptions.Default).ConfigureAwait(false);
             }
             else
             {
-                // Delete our "I'm adding you!", and send the same message that we sent to the general channel.
+                // 删除我们的"正在添加您！"消息，并发送与通用频道相同的消息
                 // KOOK.Net 中，无法删除私信消息，直接忽略此步骤
                 // await test.DeleteAsync().ConfigureAwait(false);
             }
@@ -74,7 +74,7 @@ public static class QueueHelper<T> where T : PKM, new()
 
         if (added == QueueResultAdd.AlreadyInQueue)
         {
-            msg = "Sorry, you are already in the queue.";
+            msg = "抱歉，您已经在队列中了。";
             return false;
         }
 
@@ -82,18 +82,18 @@ public static class QueueHelper<T> where T : PKM, new()
 
         var ticketID = "";
         if (TradeStartModule<T>.IsStartChannel(context.Channel.Id))
-            ticketID = $", unique ID: {detail.ID}";
+            ticketID = $", 唯一ID: {detail.ID}";
 
         var pokeName = "";
         if (t == PokeTradeType.Specific && pk.Species != 0)
-            pokeName = $" Receiving: {GameInfo.GetStrings("en").Species[pk.Species]}.";
-        msg = $"{user.KMarkdownMention} - Added to the {type} queue{ticketID}. Current Position: {position.Position}.{pokeName}";
+            pokeName = $" 接收: {GameInfo.GetStrings("en").Species[pk.Species]}。";
+        msg = $"{user.KMarkdownMention} - 已添加到 {type} 队列{ticketID}。当前位置: {position.Position}。{pokeName}";
 
         var botct = Info.Hub.Bots.Count;
         if (position.Position > botct)
         {
             var eta = Info.Hub.Config.Queues.EstimateDelay(position.Position, botct);
-            msg += $" Estimated: {eta:F1} minutes.";
+            msg += $" 预计等待: {eta:F1} 分钟。";
         }
         return true;
     }
@@ -104,36 +104,34 @@ public static class QueueHelper<T> where T : PKM, new()
         switch (ex.KookCode)
         {
             case KookErrorCode.MissingPermissions:
-            {
-                // Check if the exception was raised due to missing "Send Messages" or "Manage Messages" permissions. Nag the bot owner if so.
-                var permissions = context.Guild.CurrentUser.GetPermissions(context.Channel as IGuildChannel);
-                if (!permissions.SendMessages)
                 {
-                    // Nag the owner in logs.
-                    message = "You must grant me \"Send Messages\" permissions!";
-                    Base.LogUtil.LogError(message, "QueueHelper");
-                    return;
+                    // 检查异常是否由于缺少"发送消息"或"管理消息"权限引起。如果是，则提醒机器人所有者。
+                    var permissions = context.Guild.CurrentUser.GetPermissions(context.Channel as IGuildChannel);
+                    if (!permissions.SendMessages)
+                    {
+                        // 在日志中提醒所有者
+                        message = "您必须授予我\"发送消息\"权限！";
+                        Base.LogUtil.LogError(message, "QueueHelper");
+                        return;
+                    }
+                    if (!permissions.ManageMessages)
+                    {
+                        var owner = KookBotSettings.Manager.Owner;
+                        message = $"{MentionUtils.KMarkdownMentionUser(owner)} 您必须授予我\"管理消息\"权限！";
+                    }
                 }
-                if (!permissions.ManageMessages)
-                {
-                    //var app = await context.Client.GetApplicationInfoAsync().ConfigureAwait(false);
-                    //var owner = app.Owner.Id;
-                    var owner = KookBotSettings.Manager.Owner;
-                    message = $"{MentionUtils.KMarkdownMentionUser(owner)} You must grant me \"Manage Messages\" permissions!";
-                }
-            }
                 break;
             //case KookErrorCode.CannotSendMessageToUser:
             //{
-            //    // The user either has DMs turned off, or Kook thinks they do.
-            //    message = context.User == trader ? "You must enable private messages in order to be queued!" : "The mentioned user must enable private messages in order for them to be queued!";
+            //    // 用户可能关闭了私信，或者Kook认为他们关闭了。
+            //    message = context.User == trader ? "您必须启用私信才能加入队列！" : "被提及的用户必须启用私信才能加入队列！";
             //}
             //    break;
             default:
-            {
-                // Send a generic error message.
-                message = ex.KookCode != null ? $"Kook error {(int)ex.KookCode}: {ex.Reason}" : $"Http error {(int)ex.HttpCode}: {ex.Message}";
-            }
+                {
+                    // 发送通用错误消息
+                    message = ex.KookCode != null ? $"Kook 错误 {(int)ex.KookCode}: {ex.Reason}" : $"HTTP 错误 {(int)ex.HttpCode}: {ex.Message}";
+                }
                 break;
         }
         await context.Channel.SendTextAsync(message).ConfigureAwait(false);

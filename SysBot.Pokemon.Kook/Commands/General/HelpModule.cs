@@ -9,16 +9,14 @@ namespace SysBot.Pokemon.Kook;
 public class HelpModule(CommandService Service) : ModuleBase<SocketCommandContext>
 {
     [Command("help")]
-    [Summary("Lists available commands.")]
+    [Summary("列出所有可用命令")]
     public async Task HelpAsync()
     {
         var builder = new CardBuilder()
-            .AddModule(new SectionModuleBuilder().WithText("Help has arrived!"))
-            .AddModule(new SectionModuleBuilder().WithText("These are the commands you can use:"));
+            .AddModule(new SectionModuleBuilder().WithText("帮助信息已送达！"))
+            .AddModule(new SectionModuleBuilder().WithText("以下是您可以使用的命令："));
 
         var mgr = KookBotSettings.Manager;
-        //var app = await Context.Client.GetApplicationInfoAsync().ConfigureAwait(false);
-        //var owner = app.Owner.Id;
         var uid = Context.User.Id;
 
         foreach (var module in Service.Modules)
@@ -30,8 +28,6 @@ public class HelpModule(CommandService Service) : ModuleBase<SocketCommandContex
                 var name = cmd.Name;
                 if (mentioned.Contains(name))
                     continue;
-                //if (cmd.Attributes.Any(z => z is RequireOwnerAttribute) && owner != uid)
-                //    continue;
                 if (cmd.Attributes.Any(z => z is RequireSudoAttribute) && !mgr.CanUseSudo(uid))
                     continue;
 
@@ -55,20 +51,20 @@ public class HelpModule(CommandService Service) : ModuleBase<SocketCommandContex
     }
 
     [Command("help")]
-    [Summary("Lists information about a specific command.")]
-    public async Task HelpAsync([Summary("The command you want help for")] string command)
+    [Summary("显示特定命令的详细信息")]
+    public async Task HelpAsync([Summary("您需要帮助的命令名称")] string command)
     {
         var result = Service.Search(Context, command);
 
         if (!result.IsSuccess)
         {
-            await ReplyTextAsync($"Sorry, I couldn't find a command like {Format.Bold($"{command}")}.").ConfigureAwait(false);
+            await ReplyTextAsync($"抱歉，未找到类似 {Format.Bold($"{command}")} 的命令。").ConfigureAwait(false);
             return;
         }
 
         var builder = new CardBuilder()
-            .AddModule(new SectionModuleBuilder().WithText("Help has arrived!"))
-            .AddModule(new SectionModuleBuilder().WithText(new KMarkdownElementBuilder($"Here are some commands like **{command}**:")));
+            .AddModule(new SectionModuleBuilder().WithText("帮助信息已送达！"))
+            .AddModule(new SectionModuleBuilder().WithText(new KMarkdownElementBuilder($"以下是与 **{command}** 相关的命令：")));
 
         foreach (var match in result.Commands)
         {
@@ -82,14 +78,14 @@ public class HelpModule(CommandService Service) : ModuleBase<SocketCommandContex
 
     private static string GetCommandSummary(CommandInfo cmd)
     {
-        return $"Summary: {cmd.Summary}\nParameters: {GetParameterSummary(cmd.Parameters)}";
+        return $"描述: {cmd.Summary}\n参数: {GetParameterSummary(cmd.Parameters)}";
     }
 
     private static string GetParameterSummary(IReadOnlyList<ParameterInfo> p)
     {
         if (p.Count == 0)
-            return "None";
-        return $"{p.Count}\n- " + string.Join("\n- ", p.Select(GetParameterSummary));
+            return "无";
+        return $"{p.Count}个参数\n- " + string.Join("\n- ", p.Select(GetParameterSummary));
     }
 
     private static string GetParameterSummary(ParameterInfo z)

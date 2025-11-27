@@ -10,7 +10,7 @@ namespace SysBot.Pokemon.Kook;
 public class BotModule<T> : ModuleBase<SocketCommandContext> where T : PKM, new()
 {
     [Command("botStatus")]
-    [Summary("Gets the status of the bots.")]
+    [Summary("获取机器人的状态信息")]
     [RequireSudo]
     public async Task GetStatusAsync()
     {
@@ -24,84 +24,84 @@ public class BotModule<T> : ModuleBase<SocketCommandContext> where T : PKM, new(
         }
         if (sb.Length == 0)
         {
-            await ReplyTextAsync("No bots configured.").ConfigureAwait(false);
+            await ReplyTextAsync("未配置任何机器人。").ConfigureAwait(false);
             return;
         }
         await ReplyTextAsync(Format.Code(sb.ToString())).ConfigureAwait(false);
     }
 
-    private static string GetDetailedSummary<TBot>(TBot z) where TBot: PokeRoutineExecutorBase
+    private static string GetDetailedSummary<TBot>(TBot z) where TBot : PokeRoutineExecutorBase
     {
         return $"- {z.Connection.Name} | {z.Connection.Label} - {z.Config.CurrentRoutineType} ~ {z.LastTime:hh:mm:ss} | {z.LastLogged}";
     }
 
     [Command("botStart")]
-    [Summary("Starts a bot by IP address/port.")]
+    [Summary("通过IP地址/端口启动机器人")]
     [RequireSudo]
     public async Task StartBotAsync(string ip)
     {
         var bot = KookBot<T>.Runner.GetBot(ip);
         if (bot == null)
         {
-            await ReplyTextAsync($"No bot has that IP address ({ip}).").ConfigureAwait(false);
+            await ReplyTextAsync($"没有机器人使用该IP地址 ({ip})。").ConfigureAwait(false);
             return;
         }
 
         bot.Start();
-        await Context.Channel.EchoAndReply($"The bot at {ip} ({bot.Bot.Connection.Label}) has been commanded to Start.").ConfigureAwait(false);
+        await Context.Channel.EchoAndReply($"已命令IP地址为 {ip} 的机器人 ({bot.Bot.Connection.Label}) 启动。").ConfigureAwait(false);
     }
 
     [Command("botStop")]
-    [Summary("Stops a bot by IP address/port.")]
+    [Summary("通过IP地址/端口停止机器人")]
     [RequireSudo]
     public async Task StopBotAsync(string ip)
     {
         var bot = KookBot<T>.Runner.GetBot(ip);
         if (bot == null)
         {
-            await ReplyTextAsync($"No bot has that IP address ({ip}).").ConfigureAwait(false);
+            await ReplyTextAsync($"没有机器人使用该IP地址 ({ip})。").ConfigureAwait(false);
             return;
         }
 
         bot.Stop();
-        await Context.Channel.EchoAndReply($"The bot at {ip} ({bot.Bot.Connection.Label}) has been commanded to Stop.").ConfigureAwait(false);
+        await Context.Channel.EchoAndReply($"已命令IP地址为 {ip} 的机器人 ({bot.Bot.Connection.Label}) 停止。").ConfigureAwait(false);
     }
 
     [Command("botIdle")]
     [Alias("botPause")]
-    [Summary("Commands a bot to Idle by IP address/port.")]
+    [Summary("通过IP地址/端口命令机器人进入空闲状态")]
     [RequireSudo]
     public async Task IdleBotAsync(string ip)
     {
         var bot = KookBot<T>.Runner.GetBot(ip);
         if (bot == null)
         {
-            await ReplyTextAsync($"No bot has that IP address ({ip}).").ConfigureAwait(false);
+            await ReplyTextAsync($"没有机器人使用该IP地址 ({ip})。").ConfigureAwait(false);
             return;
         }
 
         bot.Pause();
-        await Context.Channel.EchoAndReply($"The bot at {ip} ({bot.Bot.Connection.Label}) has been commanded to Idle.").ConfigureAwait(false);
+        await Context.Channel.EchoAndReply($"已命令IP地址为 {ip} 的机器人 ({bot.Bot.Connection.Label}) 进入空闲状态。").ConfigureAwait(false);
     }
 
     [Command("botChange")]
-    [Summary("Changes the routine of a bot (trades).")]
+    [Summary("更改机器人的工作流程类型")]
     [RequireSudo]
-    public async Task ChangeTaskAsync(string ip, [Summary("Routine enum name")] PokeRoutineType task)
+    public async Task ChangeTaskAsync(string ip, [Summary("工作流程枚举名称")] PokeRoutineType task)
     {
         var bot = KookBot<T>.Runner.GetBot(ip);
         if (bot == null)
         {
-            await ReplyTextAsync($"No bot has that IP address ({ip}).").ConfigureAwait(false);
+            await ReplyTextAsync($"没有机器人使用该IP地址 ({ip})。").ConfigureAwait(false);
             return;
         }
 
         bot.Bot.Config.Initialize(task);
-        await Context.Channel.EchoAndReply($"The bot at {ip} ({bot.Bot.Connection.Label}) has been commanded to do {task} as its next task.").ConfigureAwait(false);
+        await Context.Channel.EchoAndReply($"已命令IP地址为 {ip} 的机器人 ({bot.Bot.Connection.Label}) 的下一个任务为 {task}。").ConfigureAwait(false);
     }
 
     [Command("botRestart")]
-    [Summary("Restarts the bot(s) by IP address(es), separated by commas.")]
+    [Summary("通过IP地址重启机器人（多个IP地址用逗号分隔）")]
     [RequireSudo]
     public async Task RestartBotAsync(string ipAddressesCommaSeparated)
     {
@@ -111,14 +111,14 @@ public class BotModule<T> : ModuleBase<SocketCommandContext> where T : PKM, new(
             var bot = KookBot<T>.Runner.GetBot(ip);
             if (bot == null)
             {
-                await ReplyTextAsync($"No bot has that IP address ({ip}).").ConfigureAwait(false);
+                await ReplyTextAsync($"没有机器人使用该IP地址 ({ip})。").ConfigureAwait(false);
                 return;
             }
 
             var c = bot.Bot.Connection;
             c.Reset();
             bot.Start();
-            await Context.Channel.EchoAndReply($"The bot at {ip} ({c.Label}) has been commanded to Restart.").ConfigureAwait(false);
+            await Context.Channel.EchoAndReply($"已命令IP地址为 {ip} 的机器人 ({c.Label}) 重启。").ConfigureAwait(false);
         }
     }
 }

@@ -5,14 +5,14 @@ using System.Threading.Tasks;
 
 namespace SysBot.Pokemon.Kook;
 
-[Summary("Queues new Clone trades")]
+[Summary("排队新的克隆交易")]
 public class CloneModule<T> : ModuleBase<SocketCommandContext> where T : PKM, new()
 {
     private static TradeQueueInfo<T> Info => KookBot<T>.Runner.Hub.Queues.Info;
 
     [Command("clone")]
     [Alias("c")]
-    [Summary("Clones the Pokémon you show via Link Trade.")]
+    [Summary("通过连接交易克隆您展示的宝可梦。")]
     [RequireQueueRole(nameof(KookManager.RolesClone))]
     public Task CloneAsync(int code)
     {
@@ -22,9 +22,9 @@ public class CloneModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
 
     [Command("clone")]
     [Alias("c")]
-    [Summary("Clones the Pokémon you show via Link Trade.")]
+    [Summary("通过连接交易克隆您展示的宝可梦。")]
     [RequireQueueRole(nameof(KookManager.RolesClone))]
-    public Task CloneAsync([Summary("Trade Code")][Remainder] string code)
+    public Task CloneAsync([Summary("交易码")][Remainder] string code)
     {
         int tradeCode = Util.ToInt32(code);
         var sig = Context.User.GetFavor();
@@ -33,7 +33,7 @@ public class CloneModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
 
     [Command("clone")]
     [Alias("c")]
-    [Summary("Clones the Pokémon you show via Link Trade.")]
+    [Summary("通过连接交易克隆您展示的宝可梦。")]
     [RequireQueueRole(nameof(KookManager.RolesClone))]
     public Task CloneAsync()
     {
@@ -43,15 +43,15 @@ public class CloneModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
 
     [Command("cloneList")]
     [Alias("cl", "cq")]
-    [Summary("Prints the users in the Clone queue.")]
+    [Summary("显示克隆队列中的用户列表。")]
     [RequireSudo]
     public async Task GetListAsync()
     {
         string msg = Info.GetTradeList(PokeRoutineType.Clone);
-        
+
         var card = new CardBuilder()
-            .AddModule(new SectionModuleBuilder().WithText("These are the users who are currently waiting:"))
-            .AddModule(new SectionModuleBuilder().WithText("Pending Trades"))
+            .AddModule(new SectionModuleBuilder().WithText("当前等待克隆的用户列表:"))
+            .AddModule(new SectionModuleBuilder().WithText("待处理交易"))
             .AddModule(new SectionModuleBuilder().WithText(msg))
             .Build();
         await ReplyCardAsync(card).ConfigureAwait(false);

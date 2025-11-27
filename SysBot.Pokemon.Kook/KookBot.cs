@@ -26,7 +26,8 @@ public sealed class KookBot<T> where T : PKM, new()
     private readonly CommandService _commands;
     private readonly IServiceProvider _services;
     private bool MessageChannelsLoaded { get; set; }
-    public KookBot(PokeBotRunner<T> runner) {
+    public KookBot(PokeBotRunner<T> runner)
+    {
         Runner = runner;
         Hub = runner.Hub;
         Manager = new KookManager(Hub.Config.Kook);
@@ -37,8 +38,8 @@ public sealed class KookBot<T> where T : PKM, new()
         _client = new KookSocketClient(new KookSocketConfig
         {
             LogLevel = LogSeverity.Info,
-            MessageCacheSize = 1000, // Adjust as needed
-            AlwaysDownloadUsers = true, // Download user data for commands
+            MessageCacheSize = 1000, // 根据需要调整
+            AlwaysDownloadUsers = true, // 为命令下载用户数据
             DefaultRetryMode = RetryMode.AlwaysRetry,
         });
 
@@ -92,7 +93,7 @@ public sealed class KookBot<T> where T : PKM, new()
 
         await _client.LoginAsync(TokenType.Bot, apiToken).ConfigureAwait(false);
         await _client.StartAsync().ConfigureAwait(false);
-        LogUtil.LogInfo("Kook Bot started successfully.", "KookBot");
+        LogUtil.LogInfo("Kook 机器人启动成功。", "KookBot");
 
         var guilds = await _client.Rest.GetGuildsAsync().ConfigureAwait(false);
         if (guilds.Count != 0)
@@ -100,13 +101,13 @@ public sealed class KookBot<T> where T : PKM, new()
             var guild = guilds.First();
             var owner = await guild.GetOwnerAsync();
             Manager.Owner = owner.Id;
-            LogUtil.LogInfo($"Set owner {owner.Id} from guild: {guild.Name} (ID: {guild.Id})", "KookBot");
+            LogUtil.LogInfo($"从服务器设置所有者 {owner.Id}: {guild.Name} (ID: {guild.Id})", "KookBot");
         }
         else
         {
-            LogUtil.LogError("No guilds found. Ensure the bot has been added to at least one guild.", "KookBot");
+            LogUtil.LogError("未找到任何服务器。请确保机器人已添加到至少一个服务器中。", "KookBot");
         }
-        // Wait infinitely so your bot actually stays connected.
+        // 无限等待，确保机器人保持连接状态
         await MonitorLogIntervalAsync(token).ConfigureAwait(false);
     }
 
@@ -122,10 +123,11 @@ public sealed class KookBot<T> where T : PKM, new()
             try
             {
                 await _commands.AddModuleAsync(genModule, _services).ConfigureAwait(false);
-            } catch (Exception ex)
+            }
+            catch (Exception ex)
             {
-                LogUtil.LogError($"Failed to add module {genModule.Name}: {ex.Message}", "KookBot");
-                // Optionally, you can log the exception or handle it as needed
+                LogUtil.LogError($"添加模块失败 {genModule.Name}: {ex.Message}", "KookBot");
+                // 可选：记录异常或根据需要处理
             }
         }
         var modules = _commands.Modules.ToList();
@@ -145,22 +147,22 @@ public sealed class KookBot<T> where T : PKM, new()
                 await _commands.RemoveModuleAsync(module).ConfigureAwait(false);
         }
 
-        // Subscribe a handler to see if a message invokes a command.
+        // 订阅处理程序以检查消息是否调用命令
         _client.Ready += LoadLoggingAndEcho;
         _client.MessageReceived += HandleMessageAsync;
     }
 
     private async Task HandleMessageAsync(SocketMessage arg, SocketGuildUser user, SocketTextChannel channel)
     {
-        // Bail out if it's a System Message.
+        // 如果是系统消息则退出
         if (arg is not SocketUserMessage msg)
             return;
 
-        // We don't want the bot to respond to itself or other bots.
+        // 我们不希望机器人响应自己或其他机器人
         if (msg.Author.Id == _client.CurrentUser?.Id || (msg.Author.IsBot ?? false))
             return;
 
-        // Create a number to track where the prefix ends and the command begins
+        // 创建一个数字来跟踪前缀结束和命令开始的位置
         int pos = 0;
         if (msg.HasStringPrefix(Hub.Config.Kook.CommandPrefix, ref pos))
         {
@@ -173,7 +175,7 @@ public sealed class KookBot<T> where T : PKM, new()
 
     private async Task TryHandleMessageAsync(SocketUserMessage msg)
     {
-        // should this be a service?
+        // 这应该是一个服务吗？
         if (msg.Attachments.Count > 0)
         {
             var mgr = Manager;
@@ -184,54 +186,52 @@ public sealed class KookBot<T> where T : PKM, new()
                     await msg.Channel.RepostPKMAsShowdownAsync(att).ConfigureAwait(false);
             }
         }
-        if (msg.MentionedUserIds.Where(id => id ==_client.CurrentUser?.Id).Any())
+        if (msg.MentionedUserIds.Where(id => id == _client.CurrentUser?.Id).Any())
         {
             string commandPrefix = Manager.Config.CommandPrefix;
-            await msg.Channel.SendTextAsync($"Please use {commandPrefix}help for help");
+            await msg.Channel.SendTextAsync($"请使用 {commandPrefix}help 获取帮助信息").ConfigureAwait(false);
         }
     }
 
     private async Task<bool> TryHandleCommandAsync(SocketUserMessage msg, int pos)
     {
-        // Create a Command Context.
+        // 创建命令上下文
         var context = new SocketCommandContext(_client, msg);
 
-        // Check Permission
+        // 检查权限
         var mgr = Manager;
         if (!mgr.CanUseCommandUser(msg.Author.Id))
         {
-            await msg.Channel.SendTextAsync("You are not permitted to use this command.").ConfigureAwait(false);
+            await msg.Channel.SendTextAsync("您没有权限使用此命令。").ConfigureAwait(false);
             return true;
         }
         if (!mgr.CanUseCommandChannel(msg.Channel.Id) && msg.Author.Id != mgr.Owner)
         {
             if (Hub.Config.Kook.ReplyCannotUseCommandInChannel)
-                await msg.Channel.SendTextAsync("You can't use that command here.").ConfigureAwait(false);
+                await msg.Channel.SendTextAsync("您不能在此处使用该命令。").ConfigureAwait(false);
             return true;
         }
 
-        // Execute the command. (result does not indicate a return value, 
-        // rather an object stating if the command executed successfully).
-        var guild = msg.Channel is SocketGuildChannel g ? g.Guild.Name : "Unknown Guild";
-        await Log(new LogMessage(LogSeverity.Info, "Command", $"Executing command from {guild}#{msg.Channel.Name}:@{msg.Author.Username}. Content: {msg}. id: {msg.Author.IdentifyNumber}")).ConfigureAwait(false);
+        // 执行命令（结果不表示返回值，而是表示命令是否成功执行的对象）
+        var guild = msg.Channel is SocketGuildChannel g ? g.Guild.Name : "未知服务器";
+        await Log(new LogMessage(LogSeverity.Info, "Command", $"执行来自 {guild}#{msg.Channel.Name}:@{msg.Author.Username} 的命令。内容: {msg}。ID: {msg.Author.IdentifyNumber}")).ConfigureAwait(false);
         var result = await _commands.ExecuteAsync(context, pos, _services).ConfigureAwait(false);
 
         if (result.Error == CommandError.UnknownCommand)
             return false;
 
-        // Uncomment the following lines if you want the bot
-        // to send a message if it failed.
-        // This does not catch errors from commands with 'RunMode.Async',
-        // subscribe a handler for '_commands.CommandExecuted' to see those.
+        // 如果希望机器人在失败时发送消息，请取消注释以下行
+        // 这不捕获带有 'RunMode.Async' 的命令错误，
+        // 订阅 '_commands.CommandExecuted' 的处理程序以查看这些错误
         if (!result.IsSuccess)
-            await msg.Channel.SendTextAsync(result.ErrorReason??"No Error Reason").ConfigureAwait(false);
+            await msg.Channel.SendTextAsync(result.ErrorReason ?? "无错误原因").ConfigureAwait(false);
         return true;
     }
 
     private async Task MonitorLogIntervalAsync(CancellationToken token)
     {
-        const int Interval = 20; // seconds
-        // Check datetime for update
+        const int Interval = 20; // 秒
+        // 检查日期时间以进行更新
         while (!token.IsCancellationRequested)
         {
             var time = DateTime.Now;
@@ -253,16 +253,15 @@ public sealed class KookBot<T> where T : PKM, new()
         if (MessageChannelsLoaded)
             return;
 
-        // Restore Echoes
+        // 恢复回显
         EchoModule.RestoreChannels(_client, Hub.Config.Kook);
 
-        // Restore Logging
+        // 恢复日志记录
         LogModule.RestoreLogging(_client, Hub.Config.Kook);
         TradeStartModule<T>.RestoreTradeStarting(_client);
 
-        // Don't let it load more than once in case of Kook hiccups.
-        await Log(new LogMessage(LogSeverity.Info, "LoadLoggingAndEcho()", "Logging and Echo channels loaded!")).ConfigureAwait(false);
+        // 在 Kook 出现问题时不要让它加载多次
+        await Log(new LogMessage(LogSeverity.Info, "LoadLoggingAndEcho()", "日志和回显频道已加载！")).ConfigureAwait(false);
         MessageChannelsLoaded = true;
     }
 }
-
