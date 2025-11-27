@@ -136,14 +136,25 @@ public abstract class PokeRoutineExecutor8BS(PokeBotState Config) : PokeRoutineE
 
     protected virtual async Task EnterLinkCode(int code, PokeTradeHubConfig config, CancellationToken token)
     {
-        // Default implementation to just press directional arrows. Can do via Hid keys, but users are slower than bots at even the default code entry.
+        // 添加详细的调试信息
+        Log($"[DEBUG] 开始输入交易码: {code:00000000}");
+
         var keys = TradeUtil.GetPresses(code);
-        foreach (var key in keys)
+        var keyList = keys.ToList(); // 转换为列表以便调试
+
+        Log($"[DEBUG] 总共需要按 {keyList.Count} 个键");
+
+        int keyIndex = 0;
+        foreach (var key in keyList)
         {
+            keyIndex++;
+            Log($"[DEBUG] 按下第 {keyIndex}/{keyList.Count} 个键: {key}");
+
             int delay = config.Timings.KeypressTime;
             await Click(key, delay, token).ConfigureAwait(false);
         }
-        // Confirm Code outside of this method (allow synchronization)
+
+        Log($"[DEBUG] 交易码输入完成");
     }
 
     public async Task ReOpenGame(PokeTradeHubConfig config, CancellationToken token)

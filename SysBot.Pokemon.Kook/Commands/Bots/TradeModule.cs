@@ -33,7 +33,17 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
 
     [Command("trade")]
     [Alias("t")]
-    [Summary("Makes the bot trade you the provided Pokémon file.")]
+    [Summary("Makes the bot trade you the attached file.")]
+    [RequireQueueRole(nameof(KookManager.RolesTrade))]
+    public Task TradeAsyncAttach()
+    {
+        var code = Info.GetRandomTradeCode();
+        return TradeAsyncAttach(code, Context.User.GetFavor(), Context.User);
+    }
+
+    [Command("trade")]
+    [Alias("t")]
+    [Summary("Makes the bot trade you the attached file.")]
     [RequireQueueRole(nameof(KookManager.RolesTrade))]
     public Task TradeAsyncAttach([Summary("Trade Code")] int code)
     {

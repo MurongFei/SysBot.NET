@@ -1,4 +1,4 @@
-﻿using SysBot.Base;
+using SysBot.Base;
 using System;
 using System.Collections.Generic;
 using static SysBot.Base.SwitchButton;
@@ -9,9 +9,9 @@ public static class TradeUtil
 {
     public static int GetCodeDigit(int code, int c)
     {
-        for (int i = 7; i > c; i--)
-            code /= 10;
-        return code % 10;
+        // 将code转为8位字符串，然后按位置取数字
+        string codeStr = code.ToString("00000000");
+        return int.Parse(codeStr[c].ToString());
     }
 
     public static IEnumerable<SwitchButton> GetPresses(int code)
@@ -27,15 +27,26 @@ public static class TradeUtil
         }
     }
 
-    private static IEnumerable<SwitchButton> MoveCursor(int start, int dest) // 0-9
+    private static IEnumerable<SwitchButton> MoveCursor(int start, int dest)
     {
         if (start == dest)
             yield break;
         if (dest == 0)
         {
+            // 修复数字0的处理逻辑
             int row = (start - 1) / 3;
-            for (int i = row; i < 3; i++)
-                yield return DDOWN; // down
+            int movesDown = 3 - row; // 需要按下的次数
+
+            for (int i = 0; i < movesDown; i++)
+                yield return DDOWN;
+
+            // 0在第二列，如果当前不在第二列需要水平移动
+            int currentCol = (start - 1) % 3;
+            if (currentCol < 1)  // 当前在第一列(0)，需要向右移动
+                yield return DRIGHT;
+            else if (currentCol > 1)  // 当前在第三列(2)，需要向左移动
+                yield return DLEFT;
+
             yield break;
         }
         if (start == 0)
