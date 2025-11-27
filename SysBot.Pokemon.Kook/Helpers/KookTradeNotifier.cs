@@ -20,7 +20,8 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
 
     public void TradeInitialize(PokeRoutineExecutor<T> routine, PokeTradeDetail<T> info)
     {
-        var receive = Data.Species == 0 ? string.Empty : $" ({Data.Nickname})";
+        var pokemonName = Data.Species == 0 ? string.Empty : ShowdownTranslator<T>.GameStringsZh.Species[Data.Species];
+        var receive = Data.Species == 0 ? string.Empty : $" ({pokemonName})";
         Trader.SendTextAsync($"正在初始化交易{receive}。请做好准备。您的交易码是 {Format.Bold($"{Code: 0000 0000}")}。").ConfigureAwait(false);
     }
 
@@ -28,20 +29,35 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
     {
         var name = Info.TrainerName;
         var trainer = string.IsNullOrEmpty(name) ? string.Empty : $", {name}";
-        Trader.SendTextAsync($"正在等待您{trainer}！您的交易码是 {Format.Bold($"{Code:0000 0000}")}。我的游戏内名称是 {Format.Bold($"{routine.InGameName}")}。").ConfigureAwait(false);
+
+        var pokemonName = Data.Species == 0 ? string.Empty : ShowdownTranslator<T>.GameStringsZh.Species[Data.Species];
+        var statusMessage = Data.Species == 0 ? "正在等待您" : $"正在派送 **{pokemonName}**";
+
+        Trader.SendTextAsync($"{statusMessage}{trainer}！您的交易码是 {Format.Bold($"{Code:0000 0000}")}。我的游戏内名称是 {Format.Bold($"{routine.InGameName}")}。").ConfigureAwait(false);
     }
 
     public void TradeCanceled(PokeRoutineExecutor<T> routine, PokeTradeDetail<T> info, PokeTradeResult msg)
     {
         OnFinish?.Invoke(routine);
-        Trader.SendTextAsync($"交易已取消: {msg}").ConfigureAwait(false);
+        var chineseMsg = msg.ToString() switch
+        {
+            "NoTrainerFound" => "未找到训练家",
+            "TrainerTooSlow" => "训练家响应超时",
+            "TrainerLeft" => "训练家已离开",
+            "TrainerCanceled" => "训练家取消了交易",
+            "IllegalTrade" => "非法交易请求",
+            "SuspiciousActivity" => "检测到可疑活动",
+            _ => msg.ToString()
+        };
+        Trader.SendTextAsync($"交易已取消: {chineseMsg}").ConfigureAwait(false);
     }
 
     public void TradeFinished(PokeRoutineExecutor<T> routine, PokeTradeDetail<T> info, T result)
     {
         OnFinish?.Invoke(routine);
         var tradedToUser = Data.Species;
-        var message = tradedToUser != 0 ? $"交易完成。祝您使用 {(Species)tradedToUser} 愉快！" : "交易完成！";
+        var pokemonName = tradedToUser != 0 ? ShowdownTranslator<T>.GameStringsZh.Species[tradedToUser] : "宝可梦";
+        var message = tradedToUser != 0 ? $"交易完成。祝您使用 {pokemonName} 愉快！" : "交易完成！";
         Trader.SendTextAsync(message).ConfigureAwait(false);
         if (result.Species != 0 && Hub.Config.Kook.ReturnPKMs)
             Trader.SendPKMAsync(result, "这是您交易给我的宝可梦！").ConfigureAwait(false);
@@ -49,6 +65,16 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
 
     public void SendNotification(PokeRoutineExecutor<T> routine, PokeTradeDetail<T> info, string message)
     {
+        // 修复：直接过滤掉有问题的英文消息
+        if (message.Contains("取消交易: NoTrainerFound") ||
+            message.Contains("Canceling trade: NoTrainerFound") ||
+            message.Contains("Oops! Something happened."))
+        {
+            // 直接忽略这条消息，因为 TradeCanceled 方法已经处理了
+            return;
+        }
+
+        // 只发送其他正常的消息
         Trader.SendTextAsync(message).ConfigureAwait(false);
     }
 

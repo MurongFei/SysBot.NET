@@ -84,10 +84,21 @@ public static class QueueHelper<T> where T : PKM, new()
         if (TradeStartModule<T>.IsStartChannel(context.Channel.Id))
             ticketID = $", 唯一ID: {detail.ID}";
 
+        // 修复：使用与Dodo平台相同的中文名称获取方式
         var pokeName = "";
         if (t == PokeTradeType.Specific && pk.Species != 0)
-            pokeName = $" 接收: {GameInfo.GetStrings("zh").Species[pk.Species]}。";
-        msg = $"{user.KMarkdownMention} - 已添加到 {type} 队列{ticketID}。当前位置: {position.Position}。{pokeName}";
+            pokeName = $" 接收: {ShowdownTranslator<T>.GameStringsZh.Species[pk.Species]}。";
+
+        // 主要队列消息 - 使用中文例行程序名称
+        var routineName = type.ToString() switch
+        {
+            "LinkTrade" => "连接交易",
+            "Clone" => "克隆",
+            "Dump" => "导出",
+            "SeedCheck" => "种子检查",
+            _ => type.ToString()
+        };
+        msg = $"{user.KMarkdownMention} - 已添加到 {routineName} 队列{ticketID}。当前位置: {position.Position}。{pokeName}";
 
         var botct = Info.Hub.Bots.Count;
         if (position.Position > botct)
@@ -121,12 +132,6 @@ public static class QueueHelper<T> where T : PKM, new()
                     }
                 }
                 break;
-            //case KookErrorCode.CannotSendMessageToUser:
-            //{
-            //    // 用户可能关闭了私信，或者Kook认为他们关闭了。
-            //    message = context.User == trader ? "您必须启用私信才能加入队列！" : "被提及的用户必须启用私信才能加入队列！";
-            //}
-            //    break;
             default:
                 {
                     // 发送通用错误消息
