@@ -86,7 +86,7 @@ public static class QueueHelper<T> where T : PKM, new()
 
         var pokeName = "";
         if (t == PokeTradeType.Specific && pk.Species != 0)
-            pokeName = $" 接收: {GameInfo.GetStrings("zh").Species[pk.Species]}。";
+            pokeName = $" 接收: {GameInfo.GetStrings("en").Species[pk.Species]}。";
         msg = $"{user.KMarkdownMention} - 已添加到 {type} 队列{ticketID}。当前位置: {position.Position}。{pokeName}";
 
         var botct = Info.Hub.Bots.Count;
