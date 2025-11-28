@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PKHeX.Core;
 using SysBot.Base;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace SysBot.Pokemon.Kook;
@@ -197,10 +198,130 @@ public sealed class KookBot<T> where T : PKM, new()
                     await msg.Channel.RepostPKMAsShowdownAsync(att).ConfigureAwait(false);
             }
         }
+
+        // 新增：检查是否@了机器人并且包含Showdown代码
         if (msg.MentionedUserIds.Where(id => id == _client.CurrentUser?.Id).Any())
         {
+            // 先检查是否有附件，如果有附件则优先处理附件
+            if (msg.Attachments.Count == 0)
+            {
+                // 如果没有附件，尝试处理Showdown代码
+                if (await TryHandleMentionWithShowdownAsync(msg).ConfigureAwait(false))
+                {
+                    return; // 如果处理了Showdown代码交易，就返回
+                }
+            }
+
+            // 如果没有处理交易，则发送帮助信息
             string commandPrefix = Manager.Config.CommandPrefix;
             await msg.Channel.SendTextAsync($"请使用 {commandPrefix}help 获取帮助信息").ConfigureAwait(false);
+        }
+    }
+
+    // 新增方法：处理@机器人+Showdown代码
+    private async Task<bool> TryHandleMentionWithShowdownAsync(SocketUserMessage msg)
+    {
+        var mgr = Manager;
+
+        // 检查权限
+        if (!mgr.CanUseCommandUser(msg.Author.Id) || !mgr.CanUseCommandChannel(msg.Channel.Id))
+            return false;
+
+        // 检查用户是否拥有交易角色权限
+        if (msg.Author is SocketGuildUser guildUser)
+        {
+            var roles = guildUser.Roles.Select(r => r.Name);
+            if (!mgr.GetHasRoleAccess(nameof(KookManager.RolesTrade), roles))
+                return false;
+        }
+        else
+        {
+            // 如果不是服务器用户，则不允许交易
+            return false;
+        }
+
+        // 获取消息内容，移除@机器人的部分
+        var content = msg.Content;
+        var mentionPattern = $"<@{_client.CurrentUser?.Id}>";
+        content = content.Replace(mentionPattern, "").Trim();
+
+        // 检查内容是否为空或过短
+        if (string.IsNullOrWhiteSpace(content) || content.Length < 10)
+            return false;
+
+        try
+        {
+            // 尝试解析Showdown代码
+            if (ShowdownTranslator<T>.GameStringsZh.Species.Skip(1).Any(s => content.Contains(s)))
+            {
+                // 如果内容包含中文Showdown Set，将其翻译为英文
+                content = ShowdownTranslator<T>.Chinese2Showdown(content);
+            }
+            else
+            {
+                content = ReusableActions.StripCodeBlock(content);
+            }
+
+            var set = new ShowdownSet(content);
+            var template = AutoLegalityWrapper.GetTemplate(set);
+            if (set.InvalidLines.Count != 0 || set.Species is 0)
+            {
+                var sb = new StringBuilder(128);
+                sb.AppendLine("无法解析Showdown Set。");
+                var invalidlines = set.InvalidLines;
+                if (invalidlines.Count != 0)
+                {
+                    var localization = BattleTemplateParseErrorLocalization.Get();
+                    sb.AppendLine("检测到无效行：\n```");
+                    foreach (var line in invalidlines)
+                    {
+                        var error = line.Humanize(localization);
+                        sb.AppendLine(error);
+                    }
+                    sb.AppendLine("```");
+                }
+                if (set.Species is 0)
+                    sb.AppendLine("无法识别宝可梦种类，请检查拼写。");
+
+                var errorMsg = sb.ToString();
+                await msg.Channel.SendTextAsync(errorMsg).ConfigureAwait(false);
+                return false;
+            }
+
+            var sav = AutoLegalityWrapper.GetTrainerInfo<T>();
+            var pkm = sav.GetLegal(template, out var result);
+            var la = new LegalityAnalysis(pkm);
+            var spec = GameInfo.Strings.Species[template.Species];
+            pkm = EntityConverter.ConvertToType(pkm, typeof(T), out _) ?? pkm;
+            if (pkm is not T pk || !la.Valid)
+            {
+                var reason = result switch
+                {
+                    "Timeout" => $"生成 {spec} 设置超时。",
+                    "VersionMismatch" => "请求被拒绝：PKHeX和自动合法化模组版本不匹配。",
+                    _ => $"无法从该设置创建 {spec}。",
+                };
+                var imsg = $"抱歉！{reason}";
+                if (result == "Failed")
+                    imsg += $"\n{AutoLegalityWrapper.GetLegalizationHint(template, sav, pkm)}";
+                await msg.Channel.SendTextAsync(imsg).ConfigureAwait(false);
+                return false;
+            }
+            pk.ResetPartyStats();
+
+            // 生成随机交易代码
+            var code = Info.GetRandomTradeCode();
+            var sig = msg.Author.GetFavor();
+
+            // 调用交易队列添加逻辑
+            await AddTradeToQueueAsync(msg, code, msg.Author.Username, pk, sig, msg.Author).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LogUtil.LogSafe(ex, nameof(KookBot<T>));
+            await msg.Channel.SendTextAsync("处理Showdown代码时出现错误，请检查格式是否正确。").ConfigureAwait(false);
+            return false;
         }
     }
 
@@ -213,7 +334,7 @@ public sealed class KookBot<T> where T : PKM, new()
         if (!mgr.CanUseCommandUser(msg.Author.Id) || !mgr.CanUseCommandChannel(msg.Channel.Id))
             return false;
 
-        // 检查用户是否拥有交易角色权限 - 使用正确的方法
+        // 检查用户是否拥有交易角色权限
         if (msg.Author is SocketGuildUser guildUser)
         {
             var roles = guildUser.Roles.Select(r => r.Name);
