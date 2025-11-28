@@ -26,6 +26,10 @@ public sealed class KookBot<T> where T : PKM, new()
     private readonly CommandService _commands;
     private readonly IServiceProvider _services;
     private bool MessageChannelsLoaded { get; set; }
+
+    // 新增：添加静态属性访问
+    private static TradeQueueInfo<T> Info => KookBot<T>.Runner.Hub.Queues.Info;
+
     public KookBot(PokeBotRunner<T> runner)
     {
         Runner = runner;
@@ -180,6 +184,13 @@ public sealed class KookBot<T> where T : PKM, new()
         {
             var mgr = Manager;
             var cfg = mgr.Config;
+
+            // 新增：检查是否应该直接处理PKM文件交易
+            if (await TryHandleDirectPkmTradeAsync(msg).ConfigureAwait(false))
+            {
+                return; // 如果已经处理了交易，就返回
+            }
+
             if (cfg.ConvertPKMToShowdownSet && (cfg.ConvertPKMReplyAnyChannel || mgr.CanUseCommandChannel(msg.Channel.Id)))
             {
                 foreach (var att in msg.Attachments)
@@ -191,6 +202,105 @@ public sealed class KookBot<T> where T : PKM, new()
             string commandPrefix = Manager.Config.CommandPrefix;
             await msg.Channel.SendTextAsync($"请使用 {commandPrefix}help 获取帮助信息").ConfigureAwait(false);
         }
+    }
+
+    // 新增方法：直接处理PKM文件交易
+    private async Task<bool> TryHandleDirectPkmTradeAsync(SocketUserMessage msg)
+    {
+        var mgr = Manager;
+
+        // 检查权限
+        if (!mgr.CanUseCommandUser(msg.Author.Id) || !mgr.CanUseCommandChannel(msg.Channel.Id))
+            return false;
+
+        // 检查用户是否拥有交易角色权限 - 使用正确的方法
+        if (msg.Author is SocketGuildUser guildUser)
+        {
+            var roles = guildUser.Roles.Select(r => r.Name);
+            if (!mgr.GetHasRoleAccess(nameof(KookManager.RolesTrade), roles))
+                return false;
+        }
+        else
+        {
+            // 如果不是服务器用户，则不允许交易
+            return false;
+        }
+
+        // 只处理第一个附件
+        var attachment = msg.Attachments.FirstOrDefault();
+        if (attachment == default)
+            return false;
+
+        try
+        {
+            // 下载并解析PKM文件
+            var att = await NetUtil.DownloadPKMAsync(attachment).ConfigureAwait(false);
+            var pk = GetRequest(att);
+            if (pk == null)
+            {
+                await msg.Channel.SendTextAsync("提供的附件无法识别为有效的宝可梦文件！").ConfigureAwait(false);
+                return false;
+            }
+
+            // 生成随机交易代码
+            var code = Info.GetRandomTradeCode();
+            var sig = msg.Author.GetFavor();
+
+            // 直接调用交易队列添加逻辑
+            await AddTradeToQueueAsync(msg, code, msg.Author.Username, pk, sig, msg.Author).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LogUtil.LogSafe(ex, nameof(KookBot<T>));
+            await msg.Channel.SendTextAsync("处理宝可梦文件时出现错误，请稍后重试。").ConfigureAwait(false);
+            return false;
+        }
+    }
+
+    // 从 TradeModule 复制的辅助方法
+    private static T? GetRequest(Download<PKM> dl)
+    {
+        if (!dl.Success)
+            return null;
+        return dl.Data switch
+        {
+            null => null,
+            T pk => pk,
+            _ => EntityConverter.ConvertToType(dl.Data, typeof(T), out _) as T,
+        };
+    }
+
+    // 从 TradeModule 复制的交易队列添加方法（适配修改）
+    private async Task AddTradeToQueueAsync(SocketUserMessage msg, int code, string trainerName, T pk, RequestSignificance sig, SocketUser usr)
+    {
+        if (!pk.CanBeTraded())
+        {
+            await msg.Channel.SendTextAsync("提供的宝可梦内容被禁止交易！").ConfigureAwait(false);
+            return;
+        }
+
+        var cfg = Info.Hub.Config.Trade;
+        var la = new LegalityAnalysis(pk);
+        if (!la.Valid)
+        {
+            await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件不合法，无法交易！").ConfigureAwait(false);
+            return;
+        }
+        if (cfg.DisallowNonNatives && (la.EncounterOriginal.Context != pk.Context || pk.GO))
+        {
+            await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件不是原生版本，无法交易！").ConfigureAwait(false);
+            return;
+        }
+        if (cfg.DisallowTracked && pk is IHomeTrack { HasTracker: true })
+        {
+            await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件已被HOME追踪，无法交易！").ConfigureAwait(false);
+            return;
+        }
+
+        // 创建命令上下文用于 QueueHelper
+        var context = new SocketCommandContext(_client, msg);
+        await QueueHelper<T>.AddToQueueAsync(context, code, trainerName, sig, pk, PokeRoutineType.LinkTrade, PokeTradeType.Specific, usr).ConfigureAwait(false);
     }
 
     private async Task<bool> TryHandleCommandAsync(SocketUserMessage msg, int pos)
