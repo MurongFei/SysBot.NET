@@ -7,7 +7,7 @@ using System.Linq;
 
 namespace SysBot.Pokemon.Kook;
 
-public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, SocketUser Trader, SocketTextChannel channel)
+public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, SocketUser Trader, SocketTextChannel? channel)
     : IPokeTradeNotifier<T>
     where T : PKM, new()
 {
@@ -15,7 +15,7 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
     private PokeTradeTrainerInfo Info { get; } = Info;
     private int Code { get; } = Code;
     private SocketUser Trader { get; } = Trader;
-    private SocketTextChannel Channel { get; } = channel;
+    private SocketTextChannel? Channel { get; } = channel;
     public Action<PokeRoutineExecutor<T>>? OnFinish { private get; set; }
     public readonly PokeTradeHub<T> Hub = KookBot<T>.Runner.Hub;
 
@@ -23,13 +23,10 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
     {
         var pokemonName = Data.Species == 0 ? "神秘宝可梦" : ShowdownTranslator<T>.GameStringsZh.Species[Data.Species];
 
-        var message = $"{Trader.KMarkdownMention} 请准备与机器人进行交易！\n" +
-                     $"交易宝可梦: {pokemonName}\n" +
-                     "正在初始化交易……\n" +
-                     "正在连接！！！\n" +
-                     "交易密码：见私信";
-
-        Channel.SendTextAsync(message).ConfigureAwait(false);
+        // 使用卡片消息替换原来的文本消息
+        var card = CardHelper.CreateTradeInitCard(Trader.Username, pokemonName);
+        if (Channel != null)
+            Channel.SendCardAsync(card.Build()).ConfigureAwait(false);
 
         // 原有的私信通知保持不变
         var receive = Data.Species == 0 ? string.Empty : $" ({pokemonName})";
@@ -44,14 +41,17 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
         var pokemonName = Data.Species == 0 ? "神秘宝可梦" : ShowdownTranslator<T>.GameStringsZh.Species[Data.Species];
         var statusMessage = Data.Species == 0 ? "正在等待您" : $"正在派送 {pokemonName}";
 
-        // 在频道中发送搜索状态
-        var message = $"{Trader.KMarkdownMention} {statusMessage}{trainer}！\n" +
-                     $"机器人游戏内名称: {routine.InGameName}\n" +
-                     "请确保已输入正确的交易密码";
+        // 使用卡片消息替换原来的文本消息
+        var card = CardHelper.CreateTradeSearchingCard(
+            Trader.Username,
+            statusMessage,
+            trainer,
+            routine.InGameName
+        );
+        if (Channel != null)
+            Channel.SendCardAsync(card.Build()).ConfigureAwait(false);
 
-        Channel.SendTextAsync(message).ConfigureAwait(false);
-
-        // 原有的私信通知
+        // 原有的私信通知保持不变
         Trader.SendTextAsync($"{statusMessage}{trainer}！您的交易码是 {Format.Bold($"{Code:0000 0000}")}。我的游戏内名称是 {Format.Bold($"{routine.InGameName}")}。").ConfigureAwait(false);
     }
 
@@ -69,10 +69,12 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
             _ => msg.ToString()
         };
 
-        // 在频道中发送取消通知
-        Channel.SendTextAsync($"{Trader.KMarkdownMention} 交易已取消: {chineseMsg}").ConfigureAwait(false);
+        // 使用卡片消息替换原来的文本消息
+        var card = CardHelper.CreateTradeCanceledCard(Trader.Username, chineseMsg);
+        if (Channel != null)
+            Channel.SendCardAsync(card.Build()).ConfigureAwait(false);
 
-        // 原有的私信通知
+        // 原有的私信通知保持不变
         Trader.SendTextAsync($"交易已取消: {chineseMsg}").ConfigureAwait(false);
     }
 
@@ -83,10 +85,12 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
         var pokemonName = tradedToUser != 0 ? ShowdownTranslator<T>.GameStringsZh.Species[tradedToUser] : "宝可梦";
         var message = tradedToUser != 0 ? $"交易完成。祝您使用 {pokemonName} 愉快！" : "交易完成！";
 
-        // 在频道中发送完成通知
-        Channel.SendTextAsync($"{Trader.KMarkdownMention} {message}").ConfigureAwait(false);
+        // 使用卡片消息替换原来的文本消息
+        var card = CardHelper.CreateTradeFinishedCard(Trader.Username, message);
+        if (Channel != null)
+            Channel.SendCardAsync(card.Build()).ConfigureAwait(false);
 
-        // 原有的私信通知
+        // 原有的私信通知保持不变
         Trader.SendTextAsync(message).ConfigureAwait(false);
         if (result.Species != 0 && Hub.Config.Kook.ReturnPKMs)
             Trader.SendPKMAsync(result, "这是您交易给我的宝可梦！").ConfigureAwait(false);
