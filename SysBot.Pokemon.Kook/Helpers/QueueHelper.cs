@@ -30,13 +30,14 @@ public static class QueueHelper<T> where T : PKM, new()
             // 在频道中通知
             await context.Channel.SendTextAsync(msg).ConfigureAwait(false);
             // 在私信中通知，镜像频道中的内容
-            await trader.SendTextAsync($"{msg}\n您的交易码将是 {Format.Bold($"{code:0000 0000}")}。").ConfigureAwait(false);
+            await trader.SendTextAsync($"{msg}\n您的交易码将是 {Format.Bold($"{code:0000 0000}")}.").ConfigureAwait(false);
 
             // 清理工作
             if (result)
             {
-                // 为保护隐私，删除用户的加入消息
-                if (!context.IsPrivate)
+                // 为保护隐私，只删除传统的 $trade 命令消息
+                // 其他所有方式（直接文件上传、@机器人+Showdown）都保留消息
+                if (!context.IsPrivate && IsTraditionalTradeCommand(context.Message))
                     await context.Message.DeleteAsync(RequestOptions.Default).ConfigureAwait(false);
             }
             else
@@ -57,6 +58,14 @@ public static class QueueHelper<T> where T : PKM, new()
         return AddToQueueAsync(context, code, trainer, sig, trade, routine, type, context.User);
     }
 
+    // 新增辅助方法：判断是否为传统交易命令
+    private static bool IsTraditionalTradeCommand(SocketUserMessage msg)
+    {
+        // 只有以 $trade 开头的消息会被删除
+        // 其他所有方式（直接文件上传、@机器人+Showdown）都保留消息
+        return msg.Content.StartsWith("$trade");
+    }
+
     private static bool AddToTradeQueue(SocketCommandContext context, T pk, int code, string trainerName, RequestSignificance sig, PokeRoutineType type, PokeTradeType t, SocketUser trader, out string msg)
     {
         var user = trader;
@@ -64,7 +73,10 @@ public static class QueueHelper<T> where T : PKM, new()
         var name = user.Username;
 
         var trainer = new PokeTradeTrainerInfo(trainerName, userID);
-        var notifier = new KookTradeNotifier<T>(pk, trainer, code, user);
+
+        // 修改：传递频道信息给 KookTradeNotifier
+        var notifier = new KookTradeNotifier<T>(pk, trainer, code, user, context.Channel as SocketTextChannel);
+
         var detail = new PokeTradeDetail<T>(pk, trainer, notifier, t, code, sig == RequestSignificance.Favored);
         var trade = new TradeEntry<T>(detail, userID, type, name);
 
@@ -87,7 +99,7 @@ public static class QueueHelper<T> where T : PKM, new()
         // 修复：使用与Dodo平台相同的中文名称获取方式
         var pokeName = "";
         if (t == PokeTradeType.Specific && pk.Species != 0)
-            pokeName = $" 接收: {ShowdownTranslator<T>.GameStringsZh.Species[pk.Species]}。";
+            pokeName = $" 接收: {ShowdownTranslator<T>.GameStringsZh.Species[pk.Species]}.";
 
         // 主要队列消息 - 使用中文例行程序名称
         var routineName = type.ToString() switch

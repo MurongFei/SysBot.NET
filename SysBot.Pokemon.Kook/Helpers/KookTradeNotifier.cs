@@ -7,7 +7,7 @@ using System.Linq;
 
 namespace SysBot.Pokemon.Kook;
 
-public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, SocketUser Trader)
+public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, SocketUser Trader, SocketTextChannel channel)
     : IPokeTradeNotifier<T>
     where T : PKM, new()
 {
@@ -15,12 +15,23 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
     private PokeTradeTrainerInfo Info { get; } = Info;
     private int Code { get; } = Code;
     private SocketUser Trader { get; } = Trader;
+    private SocketTextChannel Channel { get; } = channel;
     public Action<PokeRoutineExecutor<T>>? OnFinish { private get; set; }
     public readonly PokeTradeHub<T> Hub = KookBot<T>.Runner.Hub;
 
     public void TradeInitialize(PokeRoutineExecutor<T> routine, PokeTradeDetail<T> info)
     {
-        var pokemonName = Data.Species == 0 ? string.Empty : ShowdownTranslator<T>.GameStringsZh.Species[Data.Species];
+        var pokemonName = Data.Species == 0 ? "神秘宝可梦" : ShowdownTranslator<T>.GameStringsZh.Species[Data.Species];
+
+        var message = $"{Trader.KMarkdownMention} 请准备与机器人进行交易！\n" +
+                     $"交易宝可梦: {pokemonName}\n" +
+                     "正在初始化交易……\n" +
+                     "正在连接！！！\n" +
+                     "交易密码：见私信";
+
+        Channel.SendTextAsync(message).ConfigureAwait(false);
+
+        // 原有的私信通知保持不变
         var receive = Data.Species == 0 ? string.Empty : $" ({pokemonName})";
         Trader.SendTextAsync($"正在初始化交易{receive}。请做好准备。您的交易码是 {Format.Bold($"{Code: 0000 0000}")}。").ConfigureAwait(false);
     }
@@ -30,9 +41,17 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
         var name = Info.TrainerName;
         var trainer = string.IsNullOrEmpty(name) ? string.Empty : $", {name}";
 
-        var pokemonName = Data.Species == 0 ? string.Empty : ShowdownTranslator<T>.GameStringsZh.Species[Data.Species];
-        var statusMessage = Data.Species == 0 ? "正在等待您" : $"正在派送 **{pokemonName}**";
+        var pokemonName = Data.Species == 0 ? "神秘宝可梦" : ShowdownTranslator<T>.GameStringsZh.Species[Data.Species];
+        var statusMessage = Data.Species == 0 ? "正在等待您" : $"正在派送 {pokemonName}";
 
+        // 在频道中发送搜索状态
+        var message = $"{Trader.KMarkdownMention} {statusMessage}{trainer}！\n" +
+                     $"机器人游戏内名称: {routine.InGameName}\n" +
+                     "请确保已输入正确的交易密码";
+
+        Channel.SendTextAsync(message).ConfigureAwait(false);
+
+        // 原有的私信通知
         Trader.SendTextAsync($"{statusMessage}{trainer}！您的交易码是 {Format.Bold($"{Code:0000 0000}")}。我的游戏内名称是 {Format.Bold($"{routine.InGameName}")}。").ConfigureAwait(false);
     }
 
@@ -49,6 +68,11 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
             "SuspiciousActivity" => "检测到可疑活动",
             _ => msg.ToString()
         };
+
+        // 在频道中发送取消通知
+        Channel.SendTextAsync($"{Trader.KMarkdownMention} 交易已取消: {chineseMsg}").ConfigureAwait(false);
+
+        // 原有的私信通知
         Trader.SendTextAsync($"交易已取消: {chineseMsg}").ConfigureAwait(false);
     }
 
@@ -58,6 +82,11 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
         var tradedToUser = Data.Species;
         var pokemonName = tradedToUser != 0 ? ShowdownTranslator<T>.GameStringsZh.Species[tradedToUser] : "宝可梦";
         var message = tradedToUser != 0 ? $"交易完成。祝您使用 {pokemonName} 愉快！" : "交易完成！";
+
+        // 在频道中发送完成通知
+        Channel.SendTextAsync($"{Trader.KMarkdownMention} {message}").ConfigureAwait(false);
+
+        // 原有的私信通知
         Trader.SendTextAsync(message).ConfigureAwait(false);
         if (result.Species != 0 && Hub.Config.Kook.ReturnPKMs)
             Trader.SendPKMAsync(result, "这是您交易给我的宝可梦！").ConfigureAwait(false);
@@ -74,7 +103,7 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
             return;
         }
 
-        // 只发送其他正常的消息
+        // 只发送其他正常的消息到私信
         Trader.SendTextAsync(message).ConfigureAwait(false);
     }
 
@@ -103,7 +132,7 @@ public class KookTradeNotifier<T>(T Data, PokeTradeTrainerInfo Info, int Code, S
         var lines = r.ToString();
 
         var card = new CardBuilder()
-            .AddModule(new SectionModuleBuilder().WithText($"这是种子 `{r.Seed:X16}` 的详细信息:"))
+            .AddModule(new SectionModuleBuilder().WithText($"这是种子 {r.Seed:X16} 的详细信息:"))
             .AddModule(new SectionModuleBuilder().WithText($"种子: {r.Seed:X16}"))
             .AddModule(new SectionModuleBuilder().WithText(lines))
             .Build();
