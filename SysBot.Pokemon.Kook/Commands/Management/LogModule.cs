@@ -21,11 +21,11 @@ public class LogModule : ModuleBase<SocketCommandContext>
                 AddLogChannel(c, ch.ID);
         }
 
-        LogUtil.LogInfo("Added logging to Kook channel(s) on Bot startup.", "Kook");
+        LogUtil.LogInfo("已在机器人启动时添加日志记录到Kook频道。", "Kook");
     }
 
     [Command("logHere")]
-    [Summary("Makes the bot log to the channel.")]
+    [Summary("让机器人在此频道记录日志。")]
     [RequireSudo]
     public async Task AddLogAsync()
     {
@@ -33,15 +33,15 @@ public class LogModule : ModuleBase<SocketCommandContext>
         var cid = c.Id;
         if (Channels.TryGetValue(cid, out _))
         {
-            await ReplyTextAsync("Already logging here.").ConfigureAwait(false);
+            await ReplyTextAsync("已在此频道记录日志。").ConfigureAwait(false);
             return;
         }
 
         AddLogChannel(c, cid);
 
-        // Add to Kook global loggers (saves on program close)
+        // 添加到Kook全局记录器（在程序关闭时保存）
         KookBotSettings.Settings.LoggingChannels.AddIfNew([GetReference(Context.Channel)]);
-        await ReplyTextAsync("Added logging output to this channel!").ConfigureAwait(false);
+        await ReplyTextAsync("已添加日志记录输出到此频道！").ConfigureAwait(false);
     }
 
     private static void AddLogChannel(ISocketMessageChannel c, ulong cid)
@@ -52,7 +52,7 @@ public class LogModule : ModuleBase<SocketCommandContext>
     }
 
     [Command("logInfo")]
-    [Summary("Dumps the logging settings.")]
+    [Summary("显示日志记录设置信息。")]
     [RequireSudo]
     public async Task DumpLogInfoAsync()
     {
@@ -61,44 +61,44 @@ public class LogModule : ModuleBase<SocketCommandContext>
     }
 
     [Command("logClear")]
-    [Summary("Clears the logging settings in that specific channel.")]
+    [Summary("清除指定频道的日志记录设置。")]
     [RequireSudo]
     public async Task ClearLogsAsync()
     {
         var id = Context.Channel.Id;
         if (!Channels.TryGetValue(id, out var log))
         {
-            await ReplyTextAsync("Not echoing in this channel.").ConfigureAwait(false);
+            await ReplyTextAsync("未在此频道启用日志记录功能。").ConfigureAwait(false);
             return;
         }
         LogUtil.Forwarders.Remove(log);
         Channels.Remove(Context.Channel.Id);
         KookBotSettings.Settings.LoggingChannels.RemoveAll(z => z.ID == id);
-        await ReplyTextAsync($"Logging cleared from channel: {Context.Channel.Name}").ConfigureAwait(false);
+        await ReplyTextAsync($"已从频道清除日志记录: {Context.Channel.Name}").ConfigureAwait(false);
     }
 
     [Command("logClearAll")]
-    [Summary("Clears all the logging settings.")]
+    [Summary("清除所有日志记录设置。")]
     [RequireSudo]
     public async Task ClearLogsAllAsync()
     {
         foreach (var l in Channels)
         {
             var entry = l.Value;
-            await ReplyTextAsync($"Logging cleared from {entry.ChannelName} ({entry.ChannelID}!").ConfigureAwait(false);
+            await ReplyTextAsync($"已从 {entry.ChannelName} ({entry.ChannelID}) 清除日志记录！").ConfigureAwait(false);
             LogUtil.Forwarders.Remove(entry);
         }
 
         LogUtil.Forwarders.RemoveAll(y => Channels.Select(z => z.Value).Contains(y));
         Channels.Clear();
         KookBotSettings.Settings.LoggingChannels.Clear();
-        await ReplyTextAsync("Logging cleared from all channels!").ConfigureAwait(false);
+        await ReplyTextAsync("已从所有频道清除日志记录！").ConfigureAwait(false);
     }
 
     private RemoteControlAccess GetReference(IChannel channel) => new()
     {
         ID = channel.Id,
         Name = channel.Name,
-        Comment = $"Added by {Context.User.Username} on {DateTime.Now:yyyy.MM.dd-hh:mm:ss}",
+        Comment = $"由 {Context.User.Username} 于 {DateTime.Now:yyyy.MM.dd-hh:mm:ss} 添加",
     };
 }

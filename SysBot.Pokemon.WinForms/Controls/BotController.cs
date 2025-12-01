@@ -21,13 +21,13 @@ public partial class BotController : UserControl
         for (int i = 1; i < opt.Length; i++)
         {
             var cmd = opt[i];
-            var item = new ToolStripMenuItem(cmd.ToString());
+            var item = new ToolStripMenuItem(GetCommandChinese(cmd));
             item.Click += (_, __) => SendCommand(cmd);
 
             RCMenu.Items.Add(item);
         }
 
-        var remove = new ToolStripMenuItem("Remove");
+        var remove = new ToolStripMenuItem("移除");
         remove.Click += (_, __) => TryRemove();
         RCMenu.Items.Add(remove);
         RCMenu.Opening += RcMenuOnOpening;
@@ -49,7 +49,7 @@ public partial class BotController : UserControl
         foreach (var tsi in RCMenu.Items.OfType<ToolStripMenuItem>())
         {
             var text = tsi.Text;
-            tsi.Enabled = Enum.TryParse(text, out BotControlCommand cmd)
+            tsi.Enabled = Enum.TryParse(GetCommandEnglish(text), out BotControlCommand cmd)
                 ? cmd.IsUsable(bot.IsRunning, bot.IsPaused)
                 : !bot.IsRunning;
         }
@@ -99,7 +99,7 @@ public partial class BotController : UserControl
         if (LastUpdateStatus == lastTime)
             return;
 
-        // Color decay from Green based on time
+        // 基于时间的颜色衰减（从绿色开始）
         const int threshold = 100;
         Color good = Color.Green;
         Color bad = Color.Red;
@@ -109,17 +109,17 @@ public partial class BotController : UserControl
 
         LastUpdateStatus = lastTime;
         if (seconds > 2 * threshold)
-            return; // already changed by now
+            return; // 此时已经改变
 
         if (seconds > threshold)
         {
             if (PB_Lamp.BackColor == bad)
-                return; // should we notify on change instead?
+                return; // 我们应该在改变时通知吗？
             PB_Lamp.BackColor = bad;
         }
         else
         {
-            // blend from green->red, favoring green until near saturation
+            // 从绿色混合到红色，在接近饱和之前偏向绿色
             var factor = seconds / (double)threshold;
             var blend = Blend(bad, good, factor * factor);
             PB_Lamp.BackColor = blend;
@@ -146,7 +146,7 @@ public partial class BotController : UserControl
     {
         if (Runner?.Config.SkipConsoleBotCreation != false)
         {
-            LogUtil.LogError("No bots were created because SkipConsoleBotCreation is on!", "Hub");
+            LogUtil.LogError("由于 SkipConsoleBotCreation 已开启，未创建任何机器人！", "Hub");
             return;
         }
         var bot = GetBot();
@@ -159,21 +159,21 @@ public partial class BotController : UserControl
             case BotControlCommand.Stop: bot.Stop(); break;
             case BotControlCommand.Resume: bot.Resume(); break;
             case BotControlCommand.Restart:
-            {
-                var prompt = WinFormsUtil.Prompt(MessageBoxButtons.YesNo, "Are you sure you want to restart the connection?");
-                if (prompt != DialogResult.Yes)
-                    return;
+                {
+                    var prompt = WinFormsUtil.Prompt(MessageBoxButtons.YesNo, "确定要重新启动连接吗？");
+                    if (prompt != DialogResult.Yes)
+                        return;
 
-                Runner.InitializeStart();
-                bot.Restart();
-                break;
-            }
+                    Runner.InitializeStart();
+                    bot.Restart();
+                    break;
+                }
             default:
-                WinFormsUtil.Alert($"{cmd} is not a command that can be sent to the Bot.");
+                WinFormsUtil.Alert($"{cmd} 不是可以发送给机器人的命令。");
                 return;
         }
         if (echo)
-            EchoUtil.Echo($"{bot.Bot.Connection.Name} ({bot.Bot.Config.InitialRoutine}) has been issued a command to {cmd}.");
+            EchoUtil.Echo($"{bot.Bot.Connection.Name} ({bot.Bot.Config.InitialRoutine}) 已收到 {GetCommandChinese(cmd)} 命令。");
     }
 
     private BotSource<PokeBotState> GetBot()
@@ -204,6 +204,41 @@ public partial class BotController : UserControl
         {
             ReloadStatus(bot);
         }
+    }
+
+    /// <summary>
+    /// 获取命令的中文描述
+    /// </summary>
+    private static string GetCommandChinese(BotControlCommand cmd)
+    {
+        return cmd switch
+        {
+            BotControlCommand.Start => "启动",
+            BotControlCommand.Stop => "停止",
+            BotControlCommand.Idle => "空闲",
+            BotControlCommand.Resume => "恢复",
+            BotControlCommand.Restart => "重启",
+            _ => cmd.ToString()
+        };
+    }
+
+    /// <summary>
+    /// 将中文命令文本转换回英文枚举
+    /// </summary>
+    private static string GetCommandEnglish(string? chineseText)
+    {
+        if (string.IsNullOrEmpty(chineseText))
+            return string.Empty;
+
+        return chineseText switch
+        {
+            "启动" => "Start",
+            "停止" => "Stop",
+            "空闲" => "Idle",
+            "恢复" => "Resume",
+            "重启" => "Restart",
+            _ => chineseText
+        };
     }
 }
 

@@ -10,22 +10,22 @@ using System.Threading.Tasks;
 
 namespace SysBot.Pokemon.Kook;
 
-[Summary("Queues new Link Code trades")]
+[Summary("管理新的连接代码交易队列")]
 public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, new()
 {
     private static TradeQueueInfo<T> Info => KookBot<T>.Runner.Hub.Queues.Info;
 
     [Command("tradeList")]
     [Alias("tl")]
-    [Summary("Prints the users in the trade queues.")]
+    [Summary("显示交易队列中的用户列表")]
     [RequireSudo]
     public async Task GetTradeListAsync()
     {
         string msg = Info.GetTradeList(PokeRoutineType.LinkTrade);
-        
+
         var card = new CardBuilder()
-            .AddModule(new SectionModuleBuilder().WithText("These are the users who are currently waiting:"))
-            .AddModule(new SectionModuleBuilder().WithText("Pending Trades"))
+            .AddModule(new SectionModuleBuilder().WithText("以下是当前正在等待的用户："))
+            .AddModule(new SectionModuleBuilder().WithText("待处理交易"))
             .AddModule(new SectionModuleBuilder().WithText(msg))
             .Build();
         await ReplyCardAsync(card).ConfigureAwait(false);
@@ -33,9 +33,19 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
 
     [Command("trade")]
     [Alias("t")]
-    [Summary("Makes the bot trade you the provided Pokémon file.")]
+    [Summary("让机器人交易您附加的文件")]
     [RequireQueueRole(nameof(KookManager.RolesTrade))]
-    public Task TradeAsyncAttach([Summary("Trade Code")] int code)
+    public Task TradeAsyncAttach()
+    {
+        var code = Info.GetRandomTradeCode();
+        return TradeAsyncAttach(code, Context.User.GetFavor(), Context.User);
+    }
+
+    [Command("trade")]
+    [Alias("t")]
+    [Summary("让机器人交易您附加的文件")]
+    [RequireQueueRole(nameof(KookManager.RolesTrade))]
+    public Task TradeAsyncAttach([Summary("交易代码")] int code)
     {
         var sig = Context.User.GetFavor();
         return TradeAsyncAttach(code, sig, Context.User);
@@ -43,13 +53,13 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
 
     [Command("trade")]
     [Alias("t")]
-    [Summary("Makes the bot trade you a Pokémon converted from the provided Showdown Set.")]
+    [Summary("让机器人交易从提供的Showdown Set转换的宝可梦")]
     [RequireQueueRole(nameof(KookManager.RolesTrade))]
-    public async Task TradeAsync([Summary("Trade Code")] int code, [Summary("Showdown Set")][Remainder] string content)
+    public async Task TradeAsync([Summary("交易代码")] int code, [Summary("Showdown Set")][Remainder] string content)
     {
         if (ShowdownTranslator<T>.GameStringsZh.Species.Skip(1).Any(s => content.Contains(s)))
         {
-            // If the content contains a Chinese Showdown Set, translate it to English.
+            // 如果内容包含中文Showdown Set，将其翻译为英文
             content = ShowdownTranslator<T>.Chinese2Showdown(content);
         }
         else
@@ -62,12 +72,12 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
         if (set.InvalidLines.Count != 0 || set.Species is 0)
         {
             var sb = new StringBuilder(128);
-            sb.AppendLine("Unable to parse Showdown Set.");
+            sb.AppendLine("无法解析Showdown Set。");
             var invalidlines = set.InvalidLines;
             if (invalidlines.Count != 0)
             {
                 var localization = BattleTemplateParseErrorLocalization.Get();
-                sb.AppendLine("Invalid lines detected:\n```");
+                sb.AppendLine("检测到无效行：\n```");
                 foreach (var line in invalidlines)
                 {
                     var error = line.Humanize(localization);
@@ -76,7 +86,7 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
                 sb.AppendLine("```");
             }
             if (set.Species is 0)
-                sb.AppendLine("Species could not be identified. Check your spelling.");
+                sb.AppendLine("无法识别宝可梦种类，请检查拼写。");
 
             var msg = sb.ToString();
             await ReplyTextAsync(msg).ConfigureAwait(false);
@@ -94,11 +104,11 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
             {
                 var reason = result switch
                 {
-                    "Timeout" => $"That {spec} set took too long to generate.",
-                    "VersionMismatch" => "Request refused: PKHeX and Auto-Legality Mod version mismatch.",
-                    _ => $"I wasn't able to create a {spec} from that set.",
+                    "Timeout" => $"生成 {spec} 设置超时。",
+                    "VersionMismatch" => "请求被拒绝：PKHeX和自动合法化模组版本不匹配。",
+                    _ => $"无法从该设置创建 {spec}。",
                 };
-                var imsg = $"Oops! {reason}";
+                var imsg = $"抱歉！{reason}";
                 if (result == "Failed")
                     imsg += $"\n{AutoLegalityWrapper.GetLegalizationHint(template, sav, pkm)}";
                 await ReplyTextAsync(imsg).ConfigureAwait(false);
@@ -112,14 +122,14 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
         catch (Exception ex)
         {
             LogUtil.LogSafe(ex, nameof(TradeModule<T>));
-            var msg = $"Oops! An unexpected problem happened with this Showdown Set:\n```{string.Join("\n", set.GetSetLines())}```";
+            var msg = $"抱歉！处理此Showdown Set时出现意外问题：\n```{string.Join("\n", set.GetSetLines())}```";
             await ReplyTextAsync(msg).ConfigureAwait(false);
         }
     }
 
     [Command("trade")]
     [Alias("t")]
-    [Summary("Makes the bot trade you a Pokémon converted from the provided Showdown Set.")]
+    [Summary("让机器人交易从提供的Showdown Set转换的宝可梦")]
     [RequireQueueRole(nameof(KookManager.RolesTrade))]
     public Task TradeAsync([Summary("Showdown Set")][Remainder] string content)
     {
@@ -129,7 +139,7 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
 
     [Command("trade")]
     [Alias("t")]
-    [Summary("Makes the bot trade you the attached file.")]
+    [Summary("让机器人交易您附加的文件")]
     [RequireQueueRole(nameof(KookManager.RolesTrade))]
     public Task TradeAsyncAttach(Uri file)
     {
@@ -140,34 +150,34 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
     [Command("banTrade")]
     [Alias("bt")]
     [RequireSudo]
-    public async Task BanTradeAsync([Summary("Online ID")] ulong nnid, string comment)
+    public async Task BanTradeAsync([Summary("在线ID")] ulong nnid, string comment)
     {
         KookBotSettings.HubConfig.TradeAbuse.BannedIDs.AddIfNew([GetReference(nnid, comment)]);
-        await ReplyTextAsync("Done.").ConfigureAwait(false);
+        await ReplyTextAsync("已完成。").ConfigureAwait(false);
     }
 
     private RemoteControlAccess GetReference(ulong id, string comment) => new()
     {
         ID = id,
         Name = id.ToString(),
-        Comment = $"Added by {Context.User.Username} on {DateTime.Now:yyyy.MM.dd-hh:mm:ss} ({comment})",
+        Comment = $"由 {Context.User.Username} 于 {DateTime.Now:yyyy.MM.dd-hh:mm:ss} 添加（{comment}）",
     };
 
     [Command("tradeUser")]
     [Alias("tu", "tradeOther")]
-    [Summary("Makes the bot trade the mentioned user the attached file.")]
+    [Summary("让机器人交易被提及用户附加的文件")]
     [RequireSudo]
-    public async Task TradeAsyncAttachUser([Summary("Trade Code")] int code, [Remainder] string _)
+    public async Task TradeAsyncAttachUser([Summary("交易代码")] int code, [Remainder] string _)
     {
         if (Context.Message.MentionedUsers.Count > 1)
         {
-            await ReplyTextAsync("Too many mentions. Queue one user at a time.").ConfigureAwait(false);
+            await ReplyTextAsync("提及的用户过多。请一次只队列一个用户。").ConfigureAwait(false);
             return;
         }
 
         if (Context.Message.MentionedUsers.Count == 0)
         {
-            await ReplyTextAsync("A user must be mentioned in order to do this.").ConfigureAwait(false);
+            await ReplyTextAsync("必须提及一个用户才能执行此操作。").ConfigureAwait(false);
             return;
         }
 
@@ -178,7 +188,7 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
 
     [Command("tradeUser")]
     [Alias("tu", "tradeOther")]
-    [Summary("Makes the bot trade the mentioned user the attached file.")]
+    [Summary("让机器人交易被提及用户附加的文件")]
     [RequireSudo]
     public Task TradeAsyncAttachUser([Remainder] string _)
     {
@@ -191,7 +201,7 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
         var attachment = Context.Message.Attachments.FirstOrDefault();
         if (attachment == default)
         {
-            await ReplyTextAsync("No attachment provided!").ConfigureAwait(false);
+            await ReplyTextAsync("未提供附件！").ConfigureAwait(false);
             return;
         }
 
@@ -199,7 +209,7 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
         var pk = GetRequest(att);
         if (pk == null)
         {
-            await ReplyTextAsync("Attachment provided is not compatible with this module!").ConfigureAwait(false);
+            await ReplyTextAsync("提供的附件与此模块不兼容！").ConfigureAwait(false);
             return;
         }
 
@@ -222,8 +232,8 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
     {
         if (!pk.CanBeTraded())
         {
-            // Disallow anything that cannot be traded from the game (e.g. Fusions).
-            await ReplyTextAsync("Provided Pokémon content is blocked from trading!").ConfigureAwait(false);
+            // 禁止交易游戏中无法交易的内容（例如融合宝可梦）
+            await ReplyTextAsync("提供的宝可梦内容被禁止交易！").ConfigureAwait(false);
             return;
         }
 
@@ -231,20 +241,20 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
         var la = new LegalityAnalysis(pk);
         if (!la.Valid)
         {
-            // Disallow trading illegal Pokémon.
-            await ReplyTextAsync($"{typeof(T).Name} attachment is not legal, and cannot be traded!").ConfigureAwait(false);
+            // 禁止交易非法的宝可梦
+            await ReplyTextAsync($"{typeof(T).Name} 附件不合法，无法交易！").ConfigureAwait(false);
             return;
         }
         if (cfg.DisallowNonNatives && (la.EncounterOriginal.Context != pk.Context || pk.GO))
         {
-            // Allow the owner to prevent trading entities that require a HOME Tracker even if the file has one already.
-            await ReplyTextAsync($"{typeof(T).Name} attachment is not native, and cannot be traded!").ConfigureAwait(false);
+            // 允许所有者阻止交易需要HOME追踪器的实体，即使文件已有追踪器
+            await ReplyTextAsync($"{typeof(T).Name} 附件不是原生版本，无法交易！").ConfigureAwait(false);
             return;
         }
         if (cfg.DisallowTracked && pk is IHomeTrack { HasTracker: true })
         {
-            // Allow the owner to prevent trading entities that already have a HOME Tracker.
-            await ReplyTextAsync($"{typeof(T).Name} attachment is tracked by HOME, and cannot be traded!").ConfigureAwait(false);
+            // 允许所有者阻止交易已有HOME追踪器的实体
+            await ReplyTextAsync($"{typeof(T).Name} 附件已被HOME追踪，无法交易！").ConfigureAwait(false);
             return;
         }
 

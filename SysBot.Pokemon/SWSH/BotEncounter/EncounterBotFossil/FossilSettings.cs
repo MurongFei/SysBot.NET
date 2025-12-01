@@ -1,19 +1,19 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 
 namespace SysBot.Pokemon;
 
 public class FossilSettings
 {
-    private const string Fossil = nameof(Fossil);
-    private const string Counts = nameof(Counts);
-    public override string ToString() => "Fossil Bot Settings";
+    private const string Fossil = "化石设置";
+    private const string Counts = "计数统计";
+    public override string ToString() => "化石机器人设置";
 
-    [Category(Fossil), Description("Species of fossil Pokémon to hunt for.")]
+    [Category(Fossil), Description("要寻找的化石宝可梦物种。")]
     public FossilSpecies Species { get; set; } = FossilSpecies.Dracozolt;
 
     /// <summary>
-    /// Toggle for injecting fossil pieces.
+    /// 注入化石碎片的开关。
     /// </summary>
-    [Category(Fossil), Description("Toggle for injecting fossil pieces.")]
+    [Category(Fossil), Description("注入化石碎片的开关。")]
     public bool InjectWhenEmpty { get; set; }
 }

@@ -15,7 +15,7 @@ namespace SysBot.Pokemon.Kook;
 // Copyright 2017, Christopher F. <foxbot@protonmail.com>
 public class InfoModule : ModuleBase<SocketCommandContext>
 {
-    private const string detail = "I am an open-source Kook bot powered by PKHeX.Core and other open-source software.";
+    private const string detail = "我是一个基于 PKHeX.Core 和其他开源软件驱动的开源 Kook 机器人。";
     private const string repo = "https://github.com/kwsch/SysBot.NET";
 
     [Command("info")]
@@ -25,28 +25,28 @@ public class InfoModule : ModuleBase<SocketCommandContext>
         //var app = await Context.Client.GetApplicationInfoAsync().ConfigureAwait(false);
 
         var builder = new CardBuilder()
-            .AddModule(new SectionModuleBuilder().WithText("Here's some information about me!"))
+            .AddModule(new SectionModuleBuilder().WithText("以下是一些关于我的信息！"))
             .AddModule(new SectionModuleBuilder().WithText(detail));
 
-        builder.AddModule(new SectionModuleBuilder().WithText(new KMarkdownElementBuilder("**Info**")))
+        builder.AddModule(new SectionModuleBuilder().WithText(new KMarkdownElementBuilder("**基本信息**")))
             .AddModule(new SectionModuleBuilder().WithText(
-            $"- [Source Code]({repo})\n" +
-            //$"- {Format.Bold("Owner")}: {app.Owner} ({app.Owner.Id})\n" +
-            $"- {Format.Bold("Library")}: Kook.Net ({KookConfig.Version})\n" +
-            $"- {Format.Bold("Uptime")}: {GetUptime()}\n" +
-            $"- {Format.Bold("Runtime")}: {RuntimeInformation.FrameworkDescription} {RuntimeInformation.ProcessArchitecture} " +
+            $"- [源代码]({repo})\n" +
+            //$"- {Format.Bold("所有者")}: {app.Owner} ({app.Owner.Id})\n" +
+            $"- {Format.Bold("库版本")}: Kook.Net ({KookConfig.Version})\n" +
+            $"- {Format.Bold("运行时间")}: {GetUptime()}\n" +
+            $"- {Format.Bold("运行时")}: {RuntimeInformation.FrameworkDescription} {RuntimeInformation.ProcessArchitecture} " +
             $"({RuntimeInformation.OSDescription} {RuntimeInformation.OSArchitecture})\n" +
-            $"- {Format.Bold("Buildtime")}: {GetVersionInfo("SysBot.Base", false)}\n" +
-            $"- {Format.Bold("Core Version")}: {GetVersionInfo("PKHeX.Core")}\n" +
-            $"- {Format.Bold("AutoLegality Version")}: {GetVersionInfo("PKHeX.Core.AutoMod")}\n"
+            $"- {Format.Bold("构建时间")}: {GetVersionInfo("SysBot.Base", false)}\n" +
+            $"- {Format.Bold("核心版本")}: {GetVersionInfo("PKHeX.Core")}\n" +
+            $"- {Format.Bold("自动合法化版本")}: {GetVersionInfo("PKHeX.Core.AutoMod")}\n"
         ));
 
-        builder.AddModule(new SectionModuleBuilder().WithText(new KMarkdownElementBuilder("**Stats**")))
+        builder.AddModule(new SectionModuleBuilder().WithText(new KMarkdownElementBuilder("**统计信息**")))
             .AddModule(new SectionModuleBuilder().WithText(
-            $"- {Format.Bold("Heap Size")}: {GetHeapSize()}MiB\n" +
-            $"- {Format.Bold("Guilds")}: {Context.Client.Guilds.Count}\n" +
-            $"- {Format.Bold("Channels")}: {Context.Client.Guilds.Sum(g => g.Channels.Count)}\n" +
-            $"- {Format.Bold("Users")}: {Context.Client.Guilds.Sum(g => g.MemberCount)}\n"
+            $"- {Format.Bold("堆大小")}: {GetHeapSize()}MiB\n" +
+            $"- {Format.Bold("服务器数量")}: {Context.Client.Guilds.Count}\n" +
+            $"- {Format.Bold("频道数量")}: {Context.Client.Guilds.Sum(g => g.Channels.Count)}\n" +
+            $"- {Format.Bold("用户数量")}: {Context.Client.Guilds.Sum(g => g.MemberCount)}\n"
         ));
 
         await ReplyCardAsync(builder.Build()).ConfigureAwait(false);
@@ -57,7 +57,7 @@ public class InfoModule : ModuleBase<SocketCommandContext>
 
     private static string GetVersionInfo(string assemblyName, bool inclVersion = true)
     {
-        const string _default = "Unknown";
+        const string _default = "未知";
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
         var assembly = Array.Find(assemblies, x => x.GetName().Name == assemblyName);
 
