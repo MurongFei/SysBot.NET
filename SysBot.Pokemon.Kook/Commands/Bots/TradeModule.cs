@@ -230,7 +230,9 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
 
     private async Task AddTradeToQueueAsync(int code, string trainerName, T pk, RequestSignificance sig, SocketUser usr)
     {
-        if (!pk.CanBeTraded())
+        var la = new LegalityAnalysis(pk);
+        var enc = la.EncounterOriginal;
+        if (!pk.CanBeTraded(enc))
         {
             // 禁止交易游戏中无法交易的内容（例如融合宝可梦）
             await ReplyTextAsync("提供的宝可梦内容被禁止交易！").ConfigureAwait(false);
@@ -238,19 +240,20 @@ public class TradeModule<T> : ModuleBase<SocketCommandContext> where T : PKM, ne
         }
 
         var cfg = Info.Hub.Config.Trade;
-        var la = new LegalityAnalysis(pk);
         if (!la.Valid)
         {
             // 禁止交易非法的宝可梦
             await ReplyTextAsync($"{typeof(T).Name} 附件不合法，无法交易！").ConfigureAwait(false);
             return;
         }
-        if (cfg.DisallowNonNatives && (la.EncounterOriginal.Context != pk.Context || pk.GO))
+
+        if (cfg.DisallowNonNatives && (enc.Context != pk.Context || pk.GO))
         {
             // 允许所有者阻止交易需要HOME追踪器的实体，即使文件已有追踪器
             await ReplyTextAsync($"{typeof(T).Name} 附件不是原生版本，无法交易！").ConfigureAwait(false);
             return;
         }
+
         if (cfg.DisallowTracked && pk is IHomeTrack { HasTracker: true })
         {
             // 允许所有者阻止交易已有HOME追踪器的实体

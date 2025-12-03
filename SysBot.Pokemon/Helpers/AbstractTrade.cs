@@ -209,25 +209,29 @@ public abstract class AbstractTrade<T> where T : PKM, new()
     {
         try
         {
-            if (!pkm.CanBeTraded())
+            if (pkm is null)
+            {
+                msg = $"取消派送, 宝可梦数据有误!";
+                return false;
+            }
+
+            var la = new LegalityAnalysis(pkm);
+            if (!la.Valid)
+            {
+                LogUtil.LogInfo($"非法原因:\n{la.Report()}", nameof(AbstractTrade<T>));
+                msg = $"取消派送, 宝可梦不合法!\n原因:\n{la.Report()}";
+                return false;
+            }
+
+            var enc = la.EncounterOriginal;
+            if (!pkm.CanBeTraded(enc))
             {
                 msg = $"取消派送, 官方禁止该宝可梦交易!";
                 return false;
             }
-            if (pkm is T pk)
-            {
-                var la = new LegalityAnalysis(pkm);
-                var valid = la.Valid;
-                if (valid)
-                {
-                    msg = $"已加入等待队列. 如果你选宝可梦的速度太慢，你的派送请求将被取消!";
-                    return true;
-                }
-                LogUtil.LogInfo($"非法原因:\n{la.Report()}", nameof(AbstractTrade<T>));
-            }
-            LogUtil.LogInfo($"pkm type:{pkm.GetType()}, T:{typeof(T)}", nameof(AbstractTrade<T>));
-            var reason = "我没办法创造非法宝可梦";
-            msg = $"{reason}";
+
+            msg = $"已加入等待队列. 如果你选宝可梦的速度太慢，你的派送请求将被取消!";
+            return true;
         }
         catch (Exception ex)
         {
@@ -236,6 +240,7 @@ public abstract class AbstractTrade<T> where T : PKM, new()
         }
         return false;
     }
+
     public bool CheckPkm(T pkm, out string msg)
     {
         if (!queueInfo.GetCanQueue())
@@ -265,8 +270,7 @@ public abstract class AbstractTrade<T> where T : PKM, new()
         var template = AutoLegalityWrapper.GetTemplate(set);
         if (template.Species < 1)
         {
-            msg =
-                $"取消派送, 请使用正确的Showdown Set代码";
+            msg = $"取消派送, 请使用正确的Showdown Set代码";
             return false;
         }
 
@@ -347,14 +351,12 @@ public abstract class AbstractTrade<T> where T : PKM, new()
         }
 
         var position = queueInfo.CheckPosition(userInfo.ID, type);
-        //msg = $"@{name}: Added to the {type} queue, unique ID: {detail.ID}. Current Position: {position.Position}";
         msg = $"你在第{position.Position}位";
 
         var botct = queueInfo.Hub.Bots.Count;
         if (position.Position > botct)
         {
             var eta = queueInfo.Hub.Config.Queues.EstimateDelay(position.Position, botct);
-            //msg += $". Estimated: {eta:F1} minutes.";
             msg += $", 需等待约{eta:F1}分钟";
         }
 

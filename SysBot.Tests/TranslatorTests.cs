@@ -2,7 +2,9 @@ using FluentAssertions;
 using PKHeX.Core;
 using SysBot.Pokemon;
 using SysBot.Pokemon.Helpers;
+using System;
 using System.Diagnostics;
+using System.IO;
 using Xunit;
 
 namespace SysBot.Tests;
@@ -11,6 +13,7 @@ public class TranslatorTests
 {
     static TranslatorTests() => AutoLegalityWrapper.EnsureInitialized(new Pokemon.LegalitySettings());
 
+    // 第一部分：保留您的汉化测试用例
     [Theory]
     [InlineData("公肯泰罗携带大师球6V异色努力值252生命全招式异国-泰山压顶", "Tauros (M) @ Master Ball\nShiny: Yes\nIVs: 31 HP / 31 Atk / 31 Def / 31 SpA / 31 SpD / 31 Spe\nEVs: 252 HP \n.RelearnMoves=$suggestAll\nLanguage: Italian\n-Body Slam")]
     public void TestTrans(string input, string output)
@@ -19,6 +22,8 @@ public class TranslatorTests
         result.Should().Be(output);
     }
 
+    // 第二部分：合并测试用例
+    // 您的测试用例 + 新的测试用例，但使用您的API修复
     [Theory]
     [InlineData("皮卡丘")]
     [InlineData("木木枭")]
@@ -33,6 +38,9 @@ public class TranslatorTests
     [InlineData("等级球呆火鳄")]
     [InlineData("异色古剑豹")]
     [InlineData("异色故勒顿")]
+    [InlineData("炽焰咆哮虎")]  // 来自新的
+    [InlineData("梦幻")]         // 来自新的
+    [InlineData("露奈雅拉")]     // 来自新的
     public void TestLegal(string input)
     {
         var setstring = ShowdownTranslator<PK9>.Chinese2Showdown(input);
@@ -44,14 +52,57 @@ public class TranslatorTests
         var pkm = sav.GetLegal(template, out var result);
         Trace.WriteLine(result.ToString());
 
-        if (pkm.Nickname.ToLower() == "egg" && Breeding.CanHatchAsEgg(pkm.Species)) AbstractTrade<PK9>.EggTrade(pkm, template);
+        // 使用修复后的API调用
+        if (string.Equals(pkm.Nickname, "egg", StringComparison.OrdinalIgnoreCase) && Breeding.CanHatchAsEgg(pkm.Species))
+            AbstractTrade<PK9>.EggTrade(pkm, template);
 
-        pkm.CanBeTraded().Should().BeTrue();
         (pkm is PK9).Should().BeTrue();
         var la = new LegalityAnalysis(pkm);
         if (!la.Valid)
             Trace.WriteLine(la.Report());
+        pkm.CanBeTraded(la.EncounterOriginal).Should().BeTrue();  // 修复API
         la.Valid.Should().BeTrue();
     }
 
+    // 第三部分：采用新功能（ZA版本支持）
+    [Theory]
+    [InlineData("梦境球皮卡丘")]
+    public void TestLegalZA(string input)
+    {
+        var setstring = ShowdownTranslator<PA9>.Chinese2Showdown(input);
+        var set = ShowdownUtil.ConvertToShowdown(setstring);
+        set.Should().NotBeNull();
+        var template = AutoLegalityWrapper.GetTemplate(set);
+        template.Species.Should().BeGreaterThan(0);
+        var sav = AutoLegalityWrapper.GetTrainerInfo<PA9>();
+        var pkm = sav.GetLegal(template, out var result);
+        Trace.WriteLine(result.ToString());
+
+        if (string.Equals(pkm.Nickname, "egg", StringComparison.OrdinalIgnoreCase) && Breeding.CanHatchAsEgg(pkm.Species))
+            AbstractTrade<PA9>.EggTrade(pkm, template);
+
+        (pkm is PA9).Should().BeTrue();
+        var la = new LegalityAnalysis(pkm);
+        if (!la.Valid)
+            Trace.WriteLine(la.Report());
+        pkm.CanBeTraded(la.EncounterOriginal).Should().BeTrue();  // 修复API
+        la.Valid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("C:\\Users\\easyworld\\Downloads\\boxdata Box 2.bin")]
+    public void TestLegalZAFile(string file)
+    {
+        var bytes = File.ReadAllBytes(file);
+        FileTradeHelper<PA9>.Bin2List(bytes).ForEach(pkm =>
+        {
+            pkm.Should().NotBeNull();
+            (pkm is PA9).Should().BeTrue();
+            var la = new LegalityAnalysis(pkm);
+            if (!la.Valid)
+                Trace.WriteLine(la.Report());
+            pkm.CanBeTraded(la.EncounterOriginal).Should().BeTrue();  // 修复API
+            la.Valid.Should().BeTrue();
+        });
+    }
 }

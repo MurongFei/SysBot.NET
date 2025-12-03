@@ -395,20 +395,21 @@ public sealed class KookBot<T> where T : PKM, new()
     // 从 TradeModule 复制的交易队列添加方法（适配修改）
     private async Task AddTradeToQueueAsync(SocketUserMessage msg, int code, string trainerName, T pk, RequestSignificance sig, SocketUser usr)
     {
-        if (!pk.CanBeTraded())
+        var la = new LegalityAnalysis(pk);
+        var enc = la.EncounterOriginal;
+        if (!pk.CanBeTraded(enc))
         {
             await msg.Channel.SendTextAsync("提供的宝可梦内容被禁止交易！").ConfigureAwait(false);
             return;
         }
 
         var cfg = Info.Hub.Config.Trade;
-        var la = new LegalityAnalysis(pk);
         if (!la.Valid)
         {
             await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件不合法，无法交易！").ConfigureAwait(false);
             return;
         }
-        if (cfg.DisallowNonNatives && (la.EncounterOriginal.Context != pk.Context || pk.GO))
+        if (cfg.DisallowNonNatives && (enc.Context != pk.Context || pk.GO))
         {
             await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件不是原生版本，无法交易！").ConfigureAwait(false);
             return;
