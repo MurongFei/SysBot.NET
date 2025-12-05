@@ -48,22 +48,28 @@ public class KookSettings
     [Category(Roles), Description("拥有此角色的用户被允许绕过命令限制。")]
     public RemoteControlAccessList RoleSudo { get; set; } = new() { AllowIfEmpty = false };
 
-    // 操作设置
-
     [Category(Roles), Description("拥有此角色的用户被允许以更好的位置加入队列。")]
     public RemoteControlAccessList RoleFavored { get; set; } = new() { AllowIfEmpty = false };
 
+    // 新增：批量交易权限
+    [Category(Roles), Description("拥有此角色的用户被允许使用批量交易功能。")]
+    public RemoteControlAccessList RoleCanBatchTrade { get; set; } = new() { AllowIfEmpty = false };
+
+    // 用户设置
+
     [Category(Users), Description("拥有这些用户ID的用户不能使用机器人。")]
     public RemoteControlAccessList UserBlacklist { get; set; } = new();
-
-    [Category(Channels), Description("具有这些ID的频道是机器人确认命令的唯一频道。")]
-    public RemoteControlAccessList ChannelWhitelist { get; set; } = new();
 
     [Category(Users), Description("逗号分隔的 Kook 用户ID，这些用户将拥有对机器人中心的 sudo 访问权限。")]
     public RemoteControlAccessList GlobalSudoList { get; set; } = new();
 
     [Category(Users), Description("禁用此选项将移除全局 sudo 支持。")]
     public bool AllowGlobalSudo { get; set; } = true;
+
+    // 频道设置
+
+    [Category(Channels), Description("具有这些ID的频道是机器人确认命令的唯一频道。")]
+    public RemoteControlAccessList ChannelWhitelist { get; set; } = new();
 
     [Category(Channels), Description("将回显日志机器人数据的频道ID。")]
     public RemoteControlAccessList LoggingChannels { get; set; } = new();
@@ -73,6 +79,8 @@ public class KookSettings
 
     [Category(Channels), Description("将记录特殊消息的回显频道。")]
     public RemoteControlAccessList EchoChannels { get; set; } = new();
+
+    // 操作设置
 
     [Category(Operation), Description("将交易中显示的宝可梦的PKM文件返回给用户。")]
     public bool ReturnPKMs { get; set; } = true;

@@ -4,9 +4,14 @@ using Kook.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using PKHeX.Core;
 using SysBot.Base;
+using SysBot.Pokemon.Helpers;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace SysBot.Pokemon.Kook;
 
@@ -28,7 +33,6 @@ public sealed class KookBot<T> where T : PKM, new()
     private readonly IServiceProvider _services;
     private bool MessageChannelsLoaded { get; set; }
 
-    // 新增：添加静态属性访问
     private static TradeQueueInfo<T> Info => KookBot<T>.Runner.Hub.Queues.Info;
 
     public KookBot(PokeBotRunner<T> runner)
@@ -184,22 +188,38 @@ public sealed class KookBot<T> where T : PKM, new()
         if (msg.Attachments.Count > 0)
         {
             var mgr = Manager;
-            var cfg = mgr.Config;
+            var cfg = mgr?.Config;
 
-            // 新增：检查是否应该直接处理PKM文件交易
-            if (await TryHandleDirectPkmTradeAsync(msg).ConfigureAwait(false))
+            // 检查是否是.bin文件
+            var attachment = msg.Attachments.FirstOrDefault();
+            if (attachment != null)
             {
-                return; // 如果已经处理了交易，就返回
+                var fileName = attachment.Filename?.ToLower() ?? "";
+                if (fileName.EndsWith(".bin"))
+                {
+                    // 优先处理.bin文件
+                    if (await TryHandleBinFileTradeAsync(msg).ConfigureAwait(false))
+                    {
+                        return;
+                    }
+                }
             }
 
-            if (cfg.ConvertPKMToShowdownSet && (cfg.ConvertPKMReplyAnyChannel || mgr.CanUseCommandChannel(msg.Channel.Id)))
+            // 原有的单个文件交易处理
+            if (await TryHandleDirectPkmTradeAsync(msg).ConfigureAwait(false))
+            {
+                return;
+            }
+
+            if (cfg?.ConvertPKMToShowdownSet == true &&
+                (cfg?.ConvertPKMReplyAnyChannel == true || (mgr?.CanUseCommandChannel(msg.Channel.Id) ?? false)))
             {
                 foreach (var att in msg.Attachments)
                     await msg.Channel.RepostPKMAsShowdownAsync(att).ConfigureAwait(false);
             }
         }
 
-        // 新增：检查是否@了机器人并且包含Showdown代码
+        // 原有的@机器人+Showdown代码处理保持不变...
         if (msg.MentionedUserIds.Where(id => id == _client.CurrentUser?.Id).Any())
         {
             // 先检查是否有附件，如果有附件则优先处理附件
@@ -213,12 +233,502 @@ public sealed class KookBot<T> where T : PKM, new()
             }
 
             // 如果没有处理交易，则发送帮助信息
-            string commandPrefix = Manager.Config.CommandPrefix;
+            string commandPrefix = Manager.Config?.CommandPrefix ?? "$";
             await msg.Channel.SendTextAsync($"请使用 {commandPrefix}help 获取帮助信息").ConfigureAwait(false);
         }
     }
 
-    // 新增方法：处理@机器人+Showdown代码
+    // ========== 新增：处理.bin文件批量交易方法 ==========
+    private async Task<bool> TryHandleBinFileTradeAsync(SocketUserMessage msg)
+    {
+        var mgr = Manager;
+
+        // 检查是否是服务器用户
+        if (msg.Author is not SocketGuildUser guildUser)
+            return false;
+
+        // 检查基础权限
+        if (!(mgr?.CanUseCommandUser(msg.Author.Id) ?? false) || !(mgr?.CanUseCommandChannel(msg.Channel.Id) ?? false))
+            return false;
+
+        // 检查用户是否拥有交易角色权限
+        var roles = guildUser.Roles.Select(r => r.Name);
+        if (!(mgr?.GetHasRoleAccess(nameof(KookManager.RolesTrade), roles) ?? false))
+            return false;
+
+        // 检查批量交易权限
+        if (!HasBatchTradePermission(guildUser))
+        {
+            await msg.Channel.SendTextAsync(
+                $"{MentionUtils.KMarkdownMentionUser(guildUser.Id)} 您没有批量交易权限，无法交易.bin文件。请联系管理员为您添加批量交易权限身份组。"
+            ).ConfigureAwait(false);
+            return true;
+        }
+
+        var attachment = msg.Attachments.FirstOrDefault();
+        if (attachment == null)
+            return false;
+
+        try
+        {
+            var fileName = attachment.Filename;
+
+            // 直接下载文件字节数据（不显示处理中消息）
+            byte[] fileData;
+            using (var httpClient = new HttpClient())
+            {
+                httpClient.Timeout = TimeSpan.FromSeconds(30);
+                fileData = await httpClient.GetByteArrayAsync(attachment.Url);
+            }
+
+            // 解析.bin文件
+            var pkms = FileTradeHelper<T>.Bin2List(fileData);
+
+            if (pkms == null || pkms.Count == 0)
+            {
+                await msg.Channel.SendTextAsync(
+                    $"{MentionUtils.KMarkdownMentionUser(guildUser.Id)} 无法解析.bin文件内容，请确保文件格式正确且包含有效的宝可梦数据。"
+                ).ConfigureAwait(false);
+                return true;
+            }
+
+            // 转换为目标类型
+            var tradePokemon = new List<T>();
+            var failedPokemon = new List<string>();
+
+            for (int i = 0; i < pkms.Count; i++)
+            {
+                var pkm = pkms[i];
+                var converted = EntityConverter.ConvertToType(pkm, typeof(T), out _) as T;
+                if (converted != null)
+                {
+                    tradePokemon.Add(converted);
+                }
+                else
+                {
+                    var speciesName = ShowdownTranslator<T>.GameStringsZh.Species[pkm.Species];
+                    failedPokemon.Add($"第{i + 1}只: {speciesName} (格式转换失败)");
+                }
+            }
+
+            if (tradePokemon.Count == 0)
+            {
+                await msg.Channel.SendTextAsync(
+                    $"{MentionUtils.KMarkdownMentionUser(guildUser.Id)} 无法转换任何宝可梦格式，请确保文件与当前游戏版本匹配。"
+                ).ConfigureAwait(false);
+                return true;
+            }
+
+            if (failedPokemon.Count > 0)
+            {
+                var failedMsg = string.Join("\n", failedPokemon.Take(3));
+                if (failedPokemon.Count > 3)
+                    failedMsg += $"\n...等 {failedPokemon.Count} 只宝可梦转换失败";
+
+                await msg.Channel.SendTextAsync(
+                    $"{MentionUtils.KMarkdownMentionUser(guildUser.Id)} 部分宝可梦转换失败:\n{failedMsg}\n将继续交易成功的 {tradePokemon.Count} 只宝可梦。"
+                ).ConfigureAwait(false);
+            }
+
+            // 显示卡片消息
+            await DisplayBatchTradeCardsAsync(msg.Channel, guildUser, tradePokemon);
+
+            // 执行批量交易
+            await ExecuteBatchTradeAsync(msg, guildUser, tradePokemon, fileName);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LogUtil.LogError($"处理.bin文件失败: {ex.Message}", "KookBot");
+            await msg.Channel.SendTextAsync(
+                $"{MentionUtils.KMarkdownMentionUser(guildUser.Id)} 处理.bin文件时出现错误，请稍后重试。"
+            ).ConfigureAwait(false);
+            return true;
+        }
+    }
+
+    // ========== 新增：显示批量交易卡片消息的方法 ==========
+    private async Task DisplayBatchTradeCardsAsync(ISocketMessageChannel channel, SocketGuildUser user, List<T> pkms)
+    {
+        var userName = user.Username;
+        var actualCount = pkms.Count;
+
+        try
+        {
+            // 1. 发送总览卡片（不包含队列位置）
+            await SendOverviewCardAsync(channel, userName, actualCount);
+
+            // 稍微延迟，避免消息发送过快（卡片消息需要更多时间）
+            await Task.Delay(500);
+
+            // 2. 发送每个宝可梦的独立卡片（最多显示5只）
+            int displayCount = Math.Min(5, actualCount);
+            for (int i = 0; i < displayCount; i++)
+            {
+                await SendPokemonCardAsync(channel, userName, pkms[i], i + 1);
+                await Task.Delay(500); // 增加延迟，避免消息发送过快
+            }
+
+            // 3. 如果有更多宝可梦没显示
+            if (actualCount > displayCount)
+            {
+                await SendRemainingInfoAsync(channel, userName, actualCount, displayCount);
+                await Task.Delay(300);
+            }
+
+            // 4. 发送状态卡片
+            await SendStatusCardAsync(channel, userName, actualCount);
+
+            // 注意：这里已经删除了队列位置卡片，现在由 QueueHelper 发送卡片消息
+
+        }
+        catch (Exception ex)
+        {
+            LogUtil.LogError($"显示卡片消息失败: {ex.Message}", "KookBot");
+            await channel.SendTextAsync($"处理宝可梦信息时出现错误，请稍后重试。").ConfigureAwait(false);
+        }
+    }
+
+    // ========== 发送总览卡片（移除队列位置信息） ==========
+    private static async Task SendOverviewCardAsync(ISocketMessageChannel channel, string trainerName, int count)
+    {
+        // 移除队列位置信息，因为它不准确
+        var text = $"训练家：{trainerName}\n" +
+                   "批量交换启动\n" +
+                   $"交换数量：{count}只";
+
+        var card = new CardBuilder()
+            .WithTheme(CardTheme.Primary)
+            .AddModule<SectionModuleBuilder>(b => b.WithText(text))
+            .Build();
+
+        await channel.SendCardAsync(card).ConfigureAwait(false);
+    }
+
+    // ========== 发送宝可梦卡片（使用正确的中文资源） ==========
+    private async Task SendPokemonCardAsync(ISocketMessageChannel channel, string trainerName, T pkm, int index)
+    {
+        try
+        {
+            // 使用正确的中文资源（与ShowdownTranslator一致）
+            var species = ShowdownTranslator<T>.GameStringsZh.Species[pkm.Species];
+            var ability = ShowdownTranslator<T>.GameStringsZh.Ability[pkm.Ability];
+
+            var gender = pkm.Gender == 0 ? "♂" : pkm.Gender == 1 ? "♀" : "";
+            var level = pkm.CurrentLevel;
+            var shiny = pkm.IsShiny ? "闪光" : "";
+            var natureName = GetNatureName(pkm.Nature);
+            var itemName = GetItemDisplayName(pkm.HeldItem);
+            var ballName = GetBallDisplayName(pkm.Ball);
+
+            // 恢复：包含训练家信息
+            var text = $"训练家：{trainerName}\n\n" +
+                       $"第{index}只：{species} {shiny}\n" +
+                       $"等级.{level} {gender} 性格：{natureName} 特性：{ability} 持有物：{itemName} 球种：{ballName}";
+
+            // 根据闪光状态选择颜色主题
+            var theme = pkm.IsShiny ? CardTheme.Warning : CardTheme.Info;
+
+            var card = new CardBuilder()
+                .WithTheme(theme)
+                .AddModule<SectionModuleBuilder>(b => b.WithText(text))
+                .Build();
+
+            await channel.SendCardAsync(card).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogUtil.LogError($"生成宝可梦卡片失败: {ex.Message}", "KookBot");
+            // 出错时回退到文本消息
+            var sb = new StringBuilder();
+            sb.AppendLine($"训练家：{trainerName}");
+            sb.AppendLine($"第{index}只 宝可梦信息显示失败");
+            await channel.SendTextAsync(sb.ToString()).ConfigureAwait(false);
+        }
+    }
+
+    // ========== 辅助方法：获取道具名称（使用ShowdownTranslator的资源） ==========
+    private static string GetItemDisplayName(int itemId)
+    {
+        if (itemId == 0) return "无";
+
+        try
+        {
+            // 使用与ShowdownTranslator相同的Item数组
+            var itemNames = ShowdownTranslator<T>.GameStringsZh.Item;
+
+            if (itemId >= 0 && itemId < itemNames.Count)
+            {
+                var itemName = itemNames[itemId];
+                if (!string.IsNullOrEmpty(itemName))
+                    return itemName;
+            }
+
+            return $"道具 {itemId}";
+        }
+        catch
+        {
+            return $"道具 {itemId}";
+        }
+    }
+
+    // ========== 辅助方法：获取球种名称（使用ShowdownTranslator的balllist） ==========
+    private static string GetBallDisplayName(int ballId)
+    {
+        try
+        {
+            // 使用与ShowdownTranslator相同的balllist数组
+            var balllist = ShowdownTranslator<T>.GameStringsZh.balllist;
+
+            // ballId 应该直接作为索引
+            if (ballId >= 0 && ballId < balllist.Length)
+            {
+                var ballName = balllist[ballId];
+                if (!string.IsNullOrEmpty(ballName))
+                    return ballName;
+            }
+
+            // 备选方案：使用固定的映射
+            return ballId switch
+            {
+                1 => "大师球",
+                2 => "究极球",
+                3 => "超级球",
+                4 => "精灵球",
+                5 => "狩猎球",
+                6 => "网纹球",
+                7 => "潜水球",
+                8 => "巢穴球",
+                9 => "重复球",
+                10 => "计时球",
+                11 => "豪华球",
+                12 => "治愈球",
+                13 => "先机球",
+                14 => "黑暗球",
+                15 => "速度球",
+                16 => "等级球",
+                17 => "诱饵球",
+                18 => "沉重球",
+                19 => "甜蜜球",
+                20 => "友友球",
+                21 => "月亮球",
+                22 => "竞争球",
+                23 => "梦境球",
+                24 => "究极球",
+                25 => "贵重球",
+                26 => "首领球",
+                27 => "公园球",
+                _ => $"球种 {ballId}"
+            };
+        }
+        catch (Exception ex)
+        {
+            LogUtil.LogError($"获取球种失败: {ex.Message}", "KookBot");
+            return $"球种 {ballId}";
+        }
+    }
+
+    // ========== 辅助方法：获取性格名称 ==========
+    private static string GetNatureName(Nature nature)
+    {
+        var natures = new[]
+        {
+            "勤奋", "怕寂寞", "勇敢", "固执", "顽皮", "大胆", "坦率", "悠闲", "淘气", "乐天",
+            "害羞", "急躁", "认真", "爽朗", "天真", "内敛", "慢吞吞", "冷静", "温和", "温顺",
+            "自大", "慎重", "浮躁", "轻浮", "慢吞吞"
+        };
+        return (int)nature < natures.Length ? natures[(int)nature] : nature.ToString();
+    }
+
+    // ========== 发送剩余宝可梦信息 ==========
+    private static async Task SendRemainingInfoAsync(ISocketMessageChannel channel, string trainerName, int totalCount, int displayedCount)
+    {
+        var text = $"训练家：{trainerName}\n" +
+                   "更多宝可梦\n" +
+                   $"总数：{totalCount} 只宝可梦\n" +
+                   $"（已显示前 {displayedCount} 只）";
+
+        var card = new CardBuilder()
+            .WithTheme(CardTheme.Secondary)
+            .AddModule<SectionModuleBuilder>(b => b.WithText(text))
+            .Build();
+
+        await channel.SendCardAsync(card).ConfigureAwait(false);
+    }
+
+    // ========== 发送状态卡片 ==========
+    private static async Task SendStatusCardAsync(ISocketMessageChannel channel, string trainerName, int count)
+    {
+        var text = $"训练家：{trainerName}\n" +
+                   "交易处理中\n" +
+                   $"已解析 {count} 只宝可梦\n" +
+                   "正在加入交易队列...\n" +
+                   "交易代码将通过私信发送";
+
+        var card = new CardBuilder()
+            .WithTheme(CardTheme.Success)
+            .AddModule<SectionModuleBuilder>(b => b.WithText(text))
+            .Build();
+
+        await channel.SendCardAsync(card).ConfigureAwait(false);
+    }
+
+    // ========== 新增：执行批量交易方法 ==========
+    private async Task ExecuteBatchTradeAsync(SocketUserMessage msg, SocketGuildUser user, List<T> pkms, string? _)
+    {
+        try
+        {
+            // 创建 KookTradeAdapter 实例
+            var tradeAdapter = new KookTradeAdapter<T>(this, msg, user);
+
+            // 使用 AbstractTrade 中的批量交易逻辑
+            tradeAdapter.StartTradeMultiPKM(pkms);
+
+        }
+        catch (Exception ex)
+        {
+            LogUtil.LogError($"执行批量交易失败: {ex.Message}", "KookBot");
+            await msg.Channel.SendTextAsync(
+                $"{MentionUtils.KMarkdownMentionUser(user.Id)} 执行批量交易时出现系统错误"
+            ).ConfigureAwait(false);
+        }
+    }
+
+    // ========== 新增：批量交易权限检查方法 ==========
+    private bool HasBatchTradePermission(SocketGuildUser user)
+    {
+        if (user == null) return false;
+
+        // 获取用户的所有角色ID
+        var userRoles = user.Roles.Select(r => r.Id.ToString());
+
+        // 检查是否在允许的列表中
+        var accessList = Manager.Config.RoleCanBatchTrade;
+        if (accessList == null) return false;
+
+        // 使用 AllowIfEmpty 和 List 属性进行检查
+        if (accessList.AllowIfEmpty && (accessList.List == null || accessList.List.Count == 0))
+            return true;
+
+        if (accessList.List == null) return false;
+
+        foreach (var roleId in userRoles)
+        {
+            // 检查角色ID是否在允许列表中（ID是字符串类型）
+            if (accessList.List.Any(role => role.ID.ToString() == roleId))
+                return true;
+        }
+
+        return false;
+    }
+
+    // ========== 原有的 TryHandleDirectPkmTradeAsync 方法 ==========
+    private async Task<bool> TryHandleDirectPkmTradeAsync(SocketUserMessage msg)
+    {
+        var mgr = Manager;
+
+        // 检查权限
+        if (!(mgr?.CanUseCommandUser(msg.Author.Id) ?? false) || !(mgr?.CanUseCommandChannel(msg.Channel.Id) ?? false))
+            return false;
+
+        // 检查用户是否拥有交易角色权限
+        if (msg.Author is SocketGuildUser guildUser)
+        {
+            var roles = guildUser.Roles.Select(r => r.Name);
+            if (!(mgr?.GetHasRoleAccess(nameof(KookManager.RolesTrade), roles) ?? false))
+                return false;
+        }
+        else
+        {
+            // 如果不是服务器用户，则不允许交易
+            return false;
+        }
+
+        // 只处理第一个附件
+        var attachment = msg.Attachments.FirstOrDefault();
+        if (attachment == default)
+            return false;
+
+        try
+        {
+            // 检查文件类型，如果是.bin文件，已经在上面的方法处理过了
+            var fileName = attachment.Filename?.ToLower() ?? "";
+            if (fileName.EndsWith(".bin"))
+                return false; // 让上面的 TryHandleBinFileTradeAsync 处理
+
+            // 下载并解析PKM文件
+            var att = await NetUtil.DownloadPKMAsync(attachment).ConfigureAwait(false);
+            var pk = GetRequest(att);
+            if (pk == null)
+            {
+                await msg.Channel.SendTextAsync("提供的附件无法识别为有效的宝可梦文件！").ConfigureAwait(false);
+                return false;
+            }
+
+            // 生成随机交易代码
+            var code = Info.GetRandomTradeCode();
+            var sig = msg.Author.GetFavor();
+
+            // 直接调用交易队列添加逻辑
+            await AddTradeToQueueAsync(msg, code, msg.Author.Username ?? "未知用户", pk, sig, msg.Author).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LogUtil.LogSafe(ex, nameof(KookBot<T>));
+            await msg.Channel.SendTextAsync("处理宝可梦文件时出现错误，请稍后重试。").ConfigureAwait(false);
+            return true;
+        }
+    }
+
+    // ========== 从 TradeModule 复制的辅助方法 ==========
+    private static T? GetRequest(Download<PKM> dl)
+    {
+        if (!dl.Success)
+            return null;
+        return dl.Data switch
+        {
+            null => null,
+            T pk => pk,
+            _ => EntityConverter.ConvertToType(dl.Data, typeof(T), out _) as T,
+        };
+    }
+
+    // ========== 从 TradeModule 复制的交易队列添加方法 ==========
+    private async Task AddTradeToQueueAsync(SocketUserMessage msg, int code, string trainerName, T pk, RequestSignificance sig, SocketUser usr)
+    {
+        var la = new LegalityAnalysis(pk);
+        var enc = la.EncounterOriginal;
+        if (!pk.CanBeTraded(enc))
+        {
+            await msg.Channel.SendTextAsync("提供的宝可梦内容被禁止交易！").ConfigureAwait(false);
+            return;
+        }
+
+        var cfg = Info.Hub.Config.Trade;
+        if (!la.Valid)
+        {
+            await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件不合法，无法交易！").ConfigureAwait(false);
+            return;
+        }
+        if (cfg.DisallowNonNatives && (enc.Context != pk.Context || pk.GO))
+        {
+            await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件不是原生版本，无法交易！").ConfigureAwait(false);
+            return;
+        }
+        if (cfg.DisallowTracked && pk is IHomeTrack { HasTracker: true })
+        {
+            await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件已被HOME追踪，无法交易！").ConfigureAwait(false);
+            return;
+        }
+
+        // 创建命令上下文用于 QueueHelper
+        var context = new SocketCommandContext(_client, msg);
+        await QueueHelper<T>.AddToQueueAsync(context, code, trainerName, sig, pk, PokeRoutineType.LinkTrade, PokeTradeType.Specific, usr).ConfigureAwait(false);
+    }
+
+    // ========== 原有的其他方法 ==========
     private async Task<bool> TryHandleMentionWithShowdownAsync(SocketUserMessage msg)
     {
         var mgr = Manager;
@@ -314,7 +824,7 @@ public sealed class KookBot<T> where T : PKM, new()
             var sig = msg.Author.GetFavor();
 
             // 调用交易队列添加逻辑
-            await AddTradeToQueueAsync(msg, code, msg.Author.Username, pk, sig, msg.Author).ConfigureAwait(false);
+            await AddTradeToQueueAsync(msg, code, msg.Author.Username ?? "未知用户", pk, sig, msg.Author).ConfigureAwait(false);
             return true;
         }
         catch (Exception ex)
@@ -323,106 +833,6 @@ public sealed class KookBot<T> where T : PKM, new()
             await msg.Channel.SendTextAsync("处理Showdown代码时出现错误，请检查格式是否正确。").ConfigureAwait(false);
             return false;
         }
-    }
-
-    // 新增方法：直接处理PKM文件交易
-    private async Task<bool> TryHandleDirectPkmTradeAsync(SocketUserMessage msg)
-    {
-        var mgr = Manager;
-
-        // 检查权限
-        if (!mgr.CanUseCommandUser(msg.Author.Id) || !mgr.CanUseCommandChannel(msg.Channel.Id))
-            return false;
-
-        // 检查用户是否拥有交易角色权限
-        if (msg.Author is SocketGuildUser guildUser)
-        {
-            var roles = guildUser.Roles.Select(r => r.Name);
-            if (!mgr.GetHasRoleAccess(nameof(KookManager.RolesTrade), roles))
-                return false;
-        }
-        else
-        {
-            // 如果不是服务器用户，则不允许交易
-            return false;
-        }
-
-        // 只处理第一个附件
-        var attachment = msg.Attachments.FirstOrDefault();
-        if (attachment == default)
-            return false;
-
-        try
-        {
-            // 下载并解析PKM文件
-            var att = await NetUtil.DownloadPKMAsync(attachment).ConfigureAwait(false);
-            var pk = GetRequest(att);
-            if (pk == null)
-            {
-                await msg.Channel.SendTextAsync("提供的附件无法识别为有效的宝可梦文件！").ConfigureAwait(false);
-                return false;
-            }
-
-            // 生成随机交易代码
-            var code = Info.GetRandomTradeCode();
-            var sig = msg.Author.GetFavor();
-
-            // 直接调用交易队列添加逻辑
-            await AddTradeToQueueAsync(msg, code, msg.Author.Username, pk, sig, msg.Author).ConfigureAwait(false);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            LogUtil.LogSafe(ex, nameof(KookBot<T>));
-            await msg.Channel.SendTextAsync("处理宝可梦文件时出现错误，请稍后重试。").ConfigureAwait(false);
-            return false;
-        }
-    }
-
-    // 从 TradeModule 复制的辅助方法
-    private static T? GetRequest(Download<PKM> dl)
-    {
-        if (!dl.Success)
-            return null;
-        return dl.Data switch
-        {
-            null => null,
-            T pk => pk,
-            _ => EntityConverter.ConvertToType(dl.Data, typeof(T), out _) as T,
-        };
-    }
-
-    // 从 TradeModule 复制的交易队列添加方法（适配修改）
-    private async Task AddTradeToQueueAsync(SocketUserMessage msg, int code, string trainerName, T pk, RequestSignificance sig, SocketUser usr)
-    {
-        var la = new LegalityAnalysis(pk);
-        var enc = la.EncounterOriginal;
-        if (!pk.CanBeTraded(enc))
-        {
-            await msg.Channel.SendTextAsync("提供的宝可梦内容被禁止交易！").ConfigureAwait(false);
-            return;
-        }
-
-        var cfg = Info.Hub.Config.Trade;
-        if (!la.Valid)
-        {
-            await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件不合法，无法交易！").ConfigureAwait(false);
-            return;
-        }
-        if (cfg.DisallowNonNatives && (enc.Context != pk.Context || pk.GO))
-        {
-            await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件不是原生版本，无法交易！").ConfigureAwait(false);
-            return;
-        }
-        if (cfg.DisallowTracked && pk is IHomeTrack { HasTracker: true })
-        {
-            await msg.Channel.SendTextAsync($"{typeof(T).Name} 附件已被HOME追踪，无法交易！").ConfigureAwait(false);
-            return;
-        }
-
-        // 创建命令上下文用于 QueueHelper
-        var context = new SocketCommandContext(_client, msg);
-        await QueueHelper<T>.AddToQueueAsync(context, code, trainerName, sig, pk, PokeRoutineType.LinkTrade, PokeTradeType.Specific, usr).ConfigureAwait(false);
     }
 
     private async Task<bool> TryHandleCommandAsync(SocketUserMessage msg, int pos)
@@ -480,6 +890,7 @@ public sealed class KookBot<T> where T : PKM, new()
             await Task.Delay(gap, token).ConfigureAwait(false);
         }
     }
+
     private async Task LoadLoggingAndEcho()
     {
         if (MessageChannelsLoaded)

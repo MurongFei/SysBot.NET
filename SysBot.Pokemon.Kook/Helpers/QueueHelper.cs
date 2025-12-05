@@ -16,39 +16,46 @@ public static class QueueHelper<TPKM> where TPKM : PKM, new()
         if ((uint)code > MaxTradeCode)
         {
             if (context.Channel != null)
-                await context.Channel.SendTextAsync("交易码应在 00000000-99999999 范围内！").ConfigureAwait(false);
+                await context.Channel.SendCardAsync(CreateErrorCard("交易码错误", "交易码应在 00000000-99999999 范围内！").Build()).ConfigureAwait(false);
             return;
         }
 
         try
         {
             const string helper = "已将您添加到队列中！当您的交易开始时，我会在这里通知您。";
-            var test = await trader.SendTextAsync(helper).ConfigureAwait(false);
+            await trader.SendTextAsync(helper).ConfigureAwait(false);
 
             // 尝试添加到队列
             var result = AddToTradeQueue(context, trade, code, trainer, sig, routine, type, trader, out var msg, out var position, out var routineName, out var pokeName, out var waitTime);
 
             if (result)
             {
+                // 延迟一下，确保之前的卡片消息已经发送
+                await Task.Delay(500).ConfigureAwait(false);
+
                 // 1. 首先发送宝可梦详细信息卡片（最上层）
                 if (trade.Species != 0) // 确保是有效的宝可梦
                 {
                     var detailCard = CreatePokemonDetailCardData(trade, trader.Username, position, routineName, waitTime ?? "");
                     await context.Channel.SendCardAsync(detailCard.Build()).ConfigureAwait(false);
+                    await Task.Delay(300).ConfigureAwait(false);
                 }
 
-                // 2. 然后发送队列状态卡片
-                var queueCard = CardHelper.CreateQueueAddedCard(trader.Username, routineName, position, pokeName ?? "", waitTime ?? "");
+                // 2. 然后发送队列状态卡片（代替原来的文本消息）
+                var queueCard = CreateQueuePositionCard(trader.Username, position, waitTime ?? "");
                 await context.Channel.SendCardAsync(queueCard.Build()).ConfigureAwait(false);
+
+                // 3. 不再发送任何文本消息到频道
+                // 原本可能在这里有文本消息发送，现在完全移除
             }
             else
             {
                 // 发送错误卡片
-                var errorCard = CardHelper.CreateErrorCard("队列添加失败", msg);
+                var errorCard = CreateErrorCard("队列添加失败", msg);
                 await context.Channel.SendCardAsync(errorCard.Build()).ConfigureAwait(false);
             }
 
-            // 在私信中通知
+            // 在私信中通知（保持不变）
             await trader.SendTextAsync($"{msg}\n您的交易码将是 {Format.Bold($"{code:0000 0000}")}.").ConfigureAwait(false);
 
             // 清理工作
@@ -62,6 +69,33 @@ public static class QueueHelper<TPKM> where TPKM : PKM, new()
         {
             await HandleKookExceptionAsync(context, trader, ex).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// 创建队列位置卡片（代替原来的文本消息）
+    /// </summary>
+    private static CardBuilder CreateQueuePositionCard(string userName, int position, string waitTime)
+    {
+        var positionText = $"你在第{position}位";
+        var waitText = !string.IsNullOrEmpty(waitTime) ? $"\n预计等待: {waitTime}" : "";
+
+        var card = new CardBuilder()
+            .WithTheme(CardTheme.Info)
+            .AddModule<SectionModuleBuilder>(b =>
+                b.WithText($"{positionText}{waitText}"));
+
+        return card;
+    }
+
+    /// <summary>
+    /// 创建错误卡片
+    /// </summary>
+    private static CardBuilder CreateErrorCard(string title, string message)
+    {
+        return new CardBuilder()
+            .WithTheme(CardTheme.Danger)
+            .AddModule<HeaderModuleBuilder>(b => b.WithText(title))
+            .AddModule<SectionModuleBuilder>(b => b.WithText(message));
     }
 
     /// <summary>
@@ -88,11 +122,59 @@ public static class QueueHelper<TPKM> where TPKM : PKM, new()
         // 获取招式信息
         var moves = GetMovesDisplay(pokemon);
 
-        return CardHelper.CreatePokemonDetailCard(
+        return CreatePokemonDetailCard(
             speciesName, genderSymbol, userName, pokemon.CurrentLevel,
             nature, ability, item, ball, ivs, evs, moves,
             teraType, position, routineName, waitTime
         );
+    }
+
+    /// <summary>
+    /// 创建宝可梦详细信息卡片
+    /// </summary>
+    private static CardBuilder CreatePokemonDetailCard(string speciesName, string genderSymbol, string userName, int level,
+        string nature, string ability, string item, string ball, string ivs, string evs,
+        string moves, string teraType, int position, string routineName, string waitTime)
+    {
+        var card = new CardBuilder()
+            .WithTheme(CardTheme.Info)
+            .AddModule<HeaderModuleBuilder>(b => b.WithText($"{speciesName} {genderSymbol}"))
+            .AddModule<DividerModuleBuilder>()
+            .AddModule<SectionModuleBuilder>(b =>
+                b.WithText($"训练家: {userName}\n等级: {level}\n性格: {nature}\n特性: {ability}\n持有物: {item}\n球种: {ball}"));
+
+        // 添加个体值信息
+        if (!string.IsNullOrEmpty(ivs))
+        {
+            card.AddModule<DividerModuleBuilder>()
+                .AddModule<SectionModuleBuilder>(b => b.WithText("个体值 (IVs)"))
+                .AddModule<SectionModuleBuilder>(b => b.WithText(ivs));
+        }
+
+        // 添加努力值信息
+        if (!string.IsNullOrEmpty(evs))
+        {
+            card.AddModule<DividerModuleBuilder>()
+                .AddModule<SectionModuleBuilder>(b => b.WithText("努力值 (EVs)"))
+                .AddModule<SectionModuleBuilder>(b => b.WithText(evs));
+        }
+
+        // 添加招式信息
+        if (!string.IsNullOrEmpty(moves))
+        {
+            card.AddModule<DividerModuleBuilder>()
+                .AddModule<SectionModuleBuilder>(b => b.WithText("招式信息"))
+                .AddModule<SectionModuleBuilder>(b => b.WithText(moves));
+        }
+
+        // 添加太晶属性（如果可用）
+        if (!string.IsNullOrEmpty(teraType))
+        {
+            card.AddModule<DividerModuleBuilder>()
+                .AddModule<SectionModuleBuilder>(b => b.WithText($"太晶属性: {teraType}"));
+        }
+
+        return card;
     }
 
     /// <summary>
@@ -216,21 +298,6 @@ public static class QueueHelper<TPKM> where TPKM : PKM, new()
         }
 
         return moves.Count > 0 ? string.Join("\n", moves) : "";
-    }
-
-    /// <summary>
-    /// 获取交易类型的显示名称
-    /// </summary>
-    private static string GetRoutineDisplayName(string routineName)
-    {
-        return routineName switch
-        {
-            "LinkTrade" => "链接交易",
-            "Clone" => "克隆",
-            "Dump" => "导出",
-            "SeedCheck" => "种子检查",
-            _ => routineName
-        };
     }
 
     public static Task AddToQueueAsync(SocketCommandContext context, int code, string trainer, RequestSignificance sig, TPKM trade, PokeRoutineType routine, PokeTradeType type)
